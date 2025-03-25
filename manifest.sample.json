@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "wft-scheduler",
+  "description": "Automatically adds your schedule to google calendar after you log into homedepot wft",
+  "version": "1.0",
+  "key": "",
+  "permissions": ["webRequest", "identity","storage", "activeTab"],
+  "oauth2": {
+    "client_id": "",
+    "scopes":["https://www.googleapis.com/auth/calendar"]
+  },
+  "action": {
+    "default_popup": "./popup/index.html",
+    "default_icon": "images/wft-scheduler-16.png"
+  },
+  "icons": {
+    "16": "images/wft-scheduler-16.png",
+    "32": "images/wft-scheduler-32.png",
+    "48": "images/wft-scheduler-48.png",
+    "128": "images/wft-scheduler-128.png"
+  },
+  "content_scripts": [
+    
+    {
+      "js": ["scripts/content.js"],
+      "matches": ["https://wft.homedepot.com/"],
+      "run_at": "document_start"
+    }
+  ],
+  "background": {
+    "service_worker": "scripts/background.js",
+    "type": "module"
+  }
+}

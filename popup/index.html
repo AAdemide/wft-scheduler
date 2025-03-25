@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>wft-scheduler</title>
+    <style>
+        * {
+            margin: 0;
+        }
+      main {
+        height: 100%;
+        width: 100%;
+        box-sizing: border-box;
+        display: flex;
+        justify-content: center;
+        text-align: center;
+        flex-direction: column;
+      }
+
+      body,
+      html {
+        height: 200px;
+        width: 250px;
+      }
+      button {
+        background-color: #3c79f8;
+        display: inline-block;
+      }
+      .hidden {
+        display: none;
+      }
+      #calendar-made {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h3 id="h3">
+        Go to
+        <a href="https://wft.homedepot.com" target="_blank"
+          >wft.homedepot.com</a
+        >
+        and login/refresh :)
+      </h3>
+    </main>
+
+    
+    <form action="" class ="hidden">
+        <h3>Refresh workforce page for up to date schedule</h3>
+      <label>
+        Shift notification method
+        <select name="method" id="reminder-method">
+          <option value="popup">popup</option>
+          <option value="email">email</option>
+        </select>
+      </label>
+      <br />
+      <br />
+      <label>
+        Shift reminder
+        <select name="minutes" id="reminder-mins">
+          <option value="30">30 minutes before my shift</option>
+          <option value="60">60 minutes before my shift</option>
+          <option value="90">90 minutes before my shift</option>
+          <option value="120">120 minutes before my shift</option>
+        </select>
+      </label>
+      <br />
+      <br />
+      <label>
+        Location
+        <input type="text" name="location" placeholder="Enter Your Home Depot address"
+      /></label>
+      <br />
+      <br />
+      <button type="submit">Add schedule to my Google Calendar</button>
+    </form>
+
+    <div id="calendar-made" class="hidden">
+      <h1>Calendar made &#9989;</h1>
+      <button id="delete-calendar">Delete current calendar</button>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>
