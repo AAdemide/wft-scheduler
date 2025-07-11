@@ -1,6 +1,6 @@
 const wftURL = /https:\/\/wft.homedepot.com\/*/;
 
-const main = window.document.querySelector("main");
+const home = window.document.querySelector("main");
 const form = document.querySelector("form");
 const calendarMade = document.querySelector("#calendar-made");
 const deleteCalButton = document.querySelector("#delete-calendar");
@@ -29,22 +29,23 @@ async function getCalId() {
 }
 
 function changePage(page) {
-  if (page == "calendar") {
+  if (page == Pages.CALENDAR) {
     form.classList.add("hidden");
-    main.classList.add("hidden");
+    home.classList.add("hidden");
     calendarMade.classList.remove("hidden");
-  } else if (page == "form") {
+  } else if (page == Pages.FORM) {
     form.classList.remove("hidden");
     calendarMade.classList.add("hidden");
-    main.classList.add("hidden");
-  } else {
+    home.classList.add("hidden");
+  } else if (page == Pages.HOME) {
     form.classList.add("hidden");
     calendarMade.classList.add("hidden");
-    main.classList.remove("hidden");
+    home.classList.remove("hidden");
   }
 }
 
-function apiStatePoll(message, page, button) {
+function apiStatePoll(message, page, button, timeout = 5000) {
+  const startTime = Date.now();
   const poller = setInterval(() => {
     chrome.runtime.sendMessage(message, ({ apiState }) => {
       if (apiState === "success") {
@@ -52,6 +53,10 @@ function apiStatePoll(message, page, button) {
         button.disabled = false;
         clearInterval(poller);
       } else if (apiState === "failed") {
+        button.disabled = false;
+        clearInterval(poller);
+      } else if (Date.now() - startTime > timeout) {
+        console.log("Timeout reached, stopping poll");
         button.disabled = false;
         clearInterval(poller);
       }
@@ -87,7 +92,11 @@ window.onload = async function () {
 
     const formData = getFormData();
 
-    apiStatePoll({ add: "events", formData, calID }, Pages.CALENDAR, formButton);
+    apiStatePoll(
+      { add: "events", formData, calID },
+      Pages.CALENDAR,
+      formButton
+    );
   };
 
   deleteCalButton.onclick = async () => {
