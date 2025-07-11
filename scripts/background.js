@@ -1,8 +1,9 @@
-import * as constants from "../utils/constants.js"
-import * as utils from "../utils/utils.js"
+import * as constants from "../utils/constants.js";
+import * as utils from "../utils/utils.js";
 
-Object.assign(self, constants)
-Object.assign(self, utils)
+Object.assign(self, constants);
+Object.assign(self, utils);
+
 //BUG: oauth webpage opening twice if you do not give access to the web app. Test out bug theory by counting how many times the app is run and printing count to see if it is run after clear interval. Suddenly stopped test more to confirm absence
 let timer;
 let myResUrl;
@@ -75,11 +76,11 @@ const deleteCalendar = (calIds) => {
       apiState = -1;
     });
 };
-const addToCalendarList = (reminder = constants.defaultReminder, id) => {
+const addToCalendarList = (reminder = constants.defaultReminder, calID) => {
   let init = { ...globalInit };
   init.method = "POST";
   init.body = JSON.stringify({
-    id: id,
+    id: calID,
     backgroundColor: "#F96302",
     foregroundColor: "#FFFFFF",
     defaultReminders: reminder,
@@ -92,14 +93,14 @@ const addToCalendarList = (reminder = constants.defaultReminder, id) => {
     .then(function (data) {})
     .catch((err) => console.log(err));
 };
-const addEventsToCalendar = async (events, formData, id) => {
+const addEventsToCalendar = async (events, formData, calID) => {
   apiState = 0
-  if (Object.keys(id).length == 0) {
-    id = await makeCalendar();
-    console.log(id);
+  if (!calID) {
+    calID = await makeCalendar();
+    console.log(calID);
     addToCalendarList(
       { method: formData.method, minutes: formData.minutes },
-      id
+      calID
     );
   }
   
@@ -111,7 +112,7 @@ const addEventsToCalendar = async (events, formData, id) => {
       const body = JSON.stringify({ ...event,
         location})
         // console.log("body: ", body)
-     return fetch(`https://www.googleapis.com/calendar/v3/calendars/${id}/events`, {
+     return fetch(`https://www.googleapis.com/calendar/v3/calendars/${calID}/events`, {
         ...init,
         body,
       })
@@ -206,7 +207,7 @@ chrome.runtime.onMessage.addListener((req, _, sendResponse) => {
       addEventsToCalendar(
         parseDays(fetchedJsons.details.days),
         req.formData,
-        req.id
+        req.calID
       );
       sendResponse({ apiState: "ready" });
     } else if (apiState == 0) {
@@ -229,7 +230,7 @@ chrome.runtime.onMessage.addListener((req, _, sendResponse) => {
     }else if (timer?.tokenValid() && apiState == undefined) {
       apiState = 1;
     } else if (apiState == 1 && timer?.tokenValid()) {
-      deleteCalendar([req.id]);
+      deleteCalendar([req.calID]);
       sendResponse({ apiState: "ready" });
     }else if (apiState==0){
       sendResponse({ apiState: "waiting" });
