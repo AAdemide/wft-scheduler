@@ -72,7 +72,7 @@ window.onload = async function () {
     changePage(Pages.CALENDAR);
   } else {
     const loginChecker = setInterval(() => {
-      chrome.runtime.sendMessage({ question: "ready" }, (res) => {
+      chrome.runtime.sendMessage({ questionReady: true }, (res) => {
         console.log("ready to fetch:", res.ready);
         if (res.ready) {
           clearInterval(loginChecker);
@@ -93,7 +93,7 @@ window.onload = async function () {
     const formData = getFormData();
 
     apiStatePoll(
-      { add: "events", formData, calID },
+      { addEvents: true, formData, calID },
       Pages.CALENDAR,
       formButton
     );
@@ -104,6 +104,6 @@ window.onload = async function () {
 
     deleteCalButton.disabled = true;
 
-    apiStatePoll({ delete: "calendar", calID }, Pages.FORM, deleteCalButton);
+    apiStatePoll({ deleteCalendar: true, calID }, Pages.FORM, deleteCalButton);
   };
 };
