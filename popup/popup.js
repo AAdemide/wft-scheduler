@@ -47,8 +47,14 @@ function changePage(page) {
 function apiStatePoll(message, page, button, timeout = 5000) {
   const startTime = Date.now();
   const poller = setInterval(() => {
-    chrome.runtime.sendMessage(message, ({ apiState }) => {
-      if (apiState === "success") {
+    chrome.runtime.sendMessage(message, (res) => {
+      // console.log(res)
+      const apiState = res.apiState
+      // console.log("waiting for poll", res, message);
+      if(apiState === "waiting") {
+        // console.log("waiting for something");
+      }
+      else if (apiState === "success") {
         changePage(page);
         button.disabled = false;
         clearInterval(poller);
@@ -65,8 +71,8 @@ function apiStatePoll(message, page, button, timeout = 5000) {
 }
 
 window.onload = async function () {
+  //calID is private
   calID = await getCalId();
-  console.log(calID);
 
   if (calID) {
     changePage(Pages.CALENDAR);

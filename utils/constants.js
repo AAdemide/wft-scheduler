@@ -14,10 +14,15 @@ const auth_params = {
   response_type: "token",
   scope: "https://www.googleapis.com/auth/calendar",
 };
-const url = new URLSearchParams(Object.entries(auth_params));
-export const auth_url =
-  "https://accounts.google.com/o/oauth2/auth?" + url.toString();
-
+export function getAuthURL(params = auth_params, promptConsent=false) {
+  let url;
+  if (promptConsent)
+    url = new URLSearchParams(Object.entries({...params, prompt: "consent"}));
+  else {
+    url = new URLSearchParams(Object.entries(params));
+  }
+  return "https://accounts.google.com/o/oauth2/auth?" + url.toString();
+}
 export const regexp = {
   wftURL: /https:\/\/wft.homedepot.com\/*/,
   summaryRegExp:

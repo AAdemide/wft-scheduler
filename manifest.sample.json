@@ -1,9 +1,8 @@
 {
   "manifest_version": 3,
   "name": "wft-scheduler",
-  "description": "Automatically adds your schedule to google calendar after you log into homedepot wft",
+  "description": "Automatically adds your schedule to google calendar after you log into The Homedepot's Workforce scheduling application",
   "version": "1.0",
-  "key": "",
   "permissions": ["webRequest", "identity","storage", "activeTab"],
   "oauth2": {
     "client_id": "",
