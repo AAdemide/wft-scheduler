@@ -14,12 +14,12 @@ const auth_params = {
   response_type: "token",
   scope: "https://www.googleapis.com/auth/calendar",
 };
-export function getAuthURL(params = auth_params, promptConsent=false) {
+export function getAuthURL(promptConsent=false) {
   let url;
   if (promptConsent)
-    url = new URLSearchParams(Object.entries({...params, prompt: "consent"}));
+    url = new URLSearchParams(Object.entries({...auth_params, prompt: "consent"}));
   else {
-    url = new URLSearchParams(Object.entries(params));
+    url = new URLSearchParams(Object.entries(auth_params));
   }
   return "https://accounts.google.com/o/oauth2/auth?" + url.toString();
 }

@@ -41,6 +41,8 @@ function changePage(page) {
     form.classList.add("hidden");
     calendarMade.classList.add("hidden");
     home.classList.remove("hidden");
+
+    chrome.runtime.sendMessage({ makeIdle: true }, () => {});
   }
 }
 
@@ -48,13 +50,12 @@ function apiStatePoll(message, page, button, timeout = 5000) {
   const startTime = Date.now();
   const poller = setInterval(() => {
     chrome.runtime.sendMessage(message, (res) => {
-      // console.log(res)
-      const apiState = res.apiState
+      console.log("response received in popup.js", res);
+      const apiState = res.apiState;
       // console.log("waiting for poll", res, message);
-      if(apiState === "waiting") {
+      if (apiState === "waiting") {
         // console.log("waiting for something");
-      }
-      else if (apiState === "success") {
+      } else if (apiState === "success") {
         changePage(page);
         button.disabled = false;
         clearInterval(poller);
