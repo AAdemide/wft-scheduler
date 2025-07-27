@@ -8,14 +8,17 @@ Object.assign(self, utils);
 let timer;
 
 //TODO: move to constants
-const API_STATES = {
+const AUTH_STATES = {
+  UNAUTHENTICATED: "unauthenticated",
   AUTHENTICATING: "authenticating",
   AUTH_FAILED: "auth_failed",
   AUTH_SUCCESS: "auth_success",
+};
+let authState = AUTH_STATES.UNAUTHENTICATED;
+const API_STATES = {
   FAILED: "failed", //failed validation or adding events
+  SUCCESS: "success", //failed validation or adding events
   WAITING: "waiting", //waiting for validation or adding events
-  VALIDATION_SUCCESS: "validation_success", //validated successfully
-  ADDITION_SUCCESS: "addition_success", //addition successfully
   IDLE: "idle", //the initial state and the reset state
 };
 //apiStates: -1 if failed (validating or adding events); 0 if waiting (validating or adding events); 1 if validated successfully ;2 if added successfully; undefined as the initial state and the reset state
@@ -40,14 +43,8 @@ let urls = {
     return this.summary && this.details && this.weekly && !swDisabled;
   },
 };
-// const gottenAllUrls = () =>
-//   urls.summary && urls.details && urls.weekly && !swDisabled;
-// const clearAllUrls = () =>
-//   ([urls.summary, urls.details, urls.weekly] = Array.from(Array(3).keys()));
 
-//returns calID or undefined
 async function makeCalendar() {
-  apiState = API_STATES.WAITING;
   let init = { ...globalInit };
   init.method = "POST";
   init.body = JSON.stringify({
@@ -64,28 +61,10 @@ async function makeCalendar() {
     const calendarID = JSON.parse(JSON.stringify(data)).id;
     chrome.storage.sync.set({ "WFT-Scheduler Calendar ID": calendarID });
     console.log("calID:", calendarID);
-    apiState = API_STATES.SUCCESS;
     return calendarID;
   } catch (error) {
     console.error("There was an error while making the calendar:", err);
-    apiState = API_STATES.FAILED;
   }
-
-  // return new Promise((resolve, reject) => {
-  //   fetch("https://www.googleapis.com/calendar/v3/calendars", init)
-  //     .then((res) => res.json())
-  //     .then(function (data) {
-  //       const calendarID = JSON.parse(JSON.stringify(data)).id;
-  //       chrome.storage.sync.set({ "WFT-Scheduler Calendar ID": calendarID });
-  //       console.log(calendarID);
-  //       resolve(calendarID);
-  //     })
-  //     .catch((err) => {
-  //       console.log(err);
-  //       apiState = -1;
-  //       reject(err);
-  //     });
-  // });
 }
 async function deleteCalendar(calIds) {
   apiState = API_STATES.WAITING;
@@ -94,14 +73,15 @@ async function deleteCalendar(calIds) {
   const results = await Promise.allSettled(
     calIds.map((id) =>
       fetch(`https://www.googleapis.com/calendar/v3/calendars/${id}`, init)
-        .then((res) => 
-           ({ id, ok: res.ok }))
+        .then((res) => ({ id, ok: res.ok }))
         .catch((err) => {
           console.log(err);
           return { id, error: err };
         })
     )
   );
+
+  console.log(results);
 
   const failed = [];
   const succeeded = [];
@@ -118,9 +98,6 @@ async function deleteCalendar(calIds) {
     }
   }
 
-  //print succeeded and failed and figure out why it is always setting apiState to failed
-  console.log("SUCCEEDED ARRAY: ", succeeded);
-  console.log("FAILED ARRAY: ", failed);
   if (succeeded.length > 0) {
     chrome.storage.sync.remove("WFT-Scheduler Calendar ID");
     console.log("Successfully removed calendars:", succeeded);
@@ -128,14 +105,13 @@ async function deleteCalendar(calIds) {
   } else if (failed.length > 0) {
     apiState = API_STATES.FAILED;
     console.warn("Failed to remove calendars:", failed);
-  } else  {
+  } else {
     apiState = API_STATES.IDLE;
   }
 }
 
 //adds calendar to users calendar list
 async function addToCalendarList(reminder = constants.defaultReminder, calID) {
-  apiState = API_STATES.WAITING;
   let init = { ...globalInit };
   init.method = "POST";
   init.body = JSON.stringify({
@@ -149,31 +125,32 @@ async function addToCalendarList(reminder = constants.defaultReminder, calID) {
       "https://www.googleapis.com/calendar/v3/users/me/calendarList?colorRgbFormat=true",
       init
     );
-    // const data = await _res.json()
-    apiState = API_STATES.SUCCESS;
   } catch (error) {
     console.error(
       "There was an error while adding calendar to calendar list",
       error
     );
-    apiState = API_STATES.FAILED;
   }
 }
 
 async function addEventsToCalendar(events, formData, calID) {
+  apiState = API_STATES.WAITING;
   if (!calID) {
-    calID = await makeCalendar();
-    console.log(calID);
-    addToCalendarList(
-      { method: formData.method, minutes: formData.minutes },
-      calID
-    );
+    try {
+      calID = await makeCalendar();
+      addToCalendarList(
+        { method: formData.method, minutes: formData.minutes },
+        calID
+      );
+    } catch (error) {
+      apiState = API_STATES.FAILED;
+    }
   }
 
   let init = { ...globalInit };
   const location = formData.location;
   init.method = "POST";
-  Promise.all(
+  return Promise.all(
     events.map((event) => {
       const body = JSON.stringify({ ...event, location });
       // console.log("body: ", body)
@@ -206,7 +183,8 @@ function getOAuthToken() {
     chrome.identity.launchWebAuthFlow(
       {
         url:
-          apiState == API_STATES.AUTH_FAILED || apiState == API_STATES.AUTHENTICATING
+          authState == AUTH_STATES.AUTH_FAILED ||
+          authState == AUTH_STATES.AUTHENTICATING
             ? constants.getAuthURL(undefined, true)
             : constants.getAuthURL(),
         interactive: true,
@@ -233,7 +211,7 @@ function getOAuthToken() {
 }
 
 async function authenticate() {
-  apiState = API_STATES.AUTHENTICATING;
+  authState = AUTH_STATES.AUTHENTICATING;
   try {
     const { token, expiresIn, tokenType } = await getOAuthToken();
     globalInit.headers = {
@@ -242,14 +220,14 @@ async function authenticate() {
     };
     timer = new TokenTimer(expiresIn - 10);
     timer.startTimer();
-    apiState = API_STATES.AUTH_SUCCESS;
+    authState = AUTH_STATES.AUTH_SUCCESS;
   } catch (error) {
     console.error("OAuth error:", error);
-    apiState = API_STATES.AUTH_FAILED;
+    authState = AUTH_STATES.AUTH_FAILED;
   }
 }
 
-const callback = function (details) {
+const onHeadersReceivedCallback = (details) => {
   apiState = API_STATES.WAITING;
   const currUrl = details.url;
 
@@ -277,61 +255,49 @@ const callback = function (details) {
           };
           swDisabled = false;
           apiState = API_STATES.SUCCESS;
-          console.log(apiState)
         })
         .catch((err) => {
           apiState = API_STATES.FAILED;
-          console.log(err)
+          console.log(err);
         });
     })();
   }
 };
 
-chrome.webRequest.onHeadersReceived.addListener(callback, filter, []);
-
-chrome.runtime.onMessage.addListener((req, _, sendResponse) => {
-  console.log(apiState)
-  // const sendAPIState = () => {
-  //   // console.log("called")
-  //   // if (apiState == API_STATES.FAILED || apiState == API_STATES.SUCCESS) {
-  //   //   apiState = API_STATES.IDLE;
-  //   // }
-  //   console.log("apiState sent from background.js:", apiState);
-  //   sendResponse({ apiState: apiState });
-  // };
+const onMessageCallback = (req, _, sendResponse) => {
   const genericHandler = async (event) => {
-    // console.log(event, apiState)
     const actions = {
       addEvents: async () => {
-        try {
-          console.log("adding events below")
-          await addEventsToCalendar(
-            parseDays(fetchedJsons.details.days),
-            req.formData,
-            req.calID
-          );
-        } catch (error) {
-          console.error(error);
-        }
+        return await addEventsToCalendar(
+          parseDays(fetchedJsons.details.days),
+          req.formData,
+          req.calID
+        );
       },
-      deleteCalendar: async () => {
-        try {
-          await deleteCalendar([req.calID]);
-        } catch (error) {
-          console.error(error);
-        }
+      delCal: async () => {
+        return await deleteCalendar([req.calID]);
       },
     };
 
-    if (apiState == API_STATES.IDLE || apiState == API_STATES.AUTH_FAILED) {
+    if (
+      authState == AUTH_STATES.UNAUTHENTICATED ||
+      authState == AUTH_STATES.AUTH_FAILED
+    ) {
       if (!timer?.tokenValid()) authenticate();
-    } else if (apiState == API_STATES.AUTH_SUCCESS && timer.tokenValid()) {
-      actions[event]();
-
-      if (apiState == API_STATES.SUCCESS) sendResponse({ [event]: "success", apiState: apiState });
-      else {
-        sendResponse({ [event]: "failed", apiState: apiState });
+    } else if (apiState == API_STATES.SUCCESS && timer?.tokenValid()) {
+      try {
+        console.log(event)
+        await actions[event]();
+        if (apiState == API_STATES.SUCCESS)
+          sendResponse({ nextPage: true, apiState: apiState });
+        else {
+          sendResponse({ [event]: "failed", apiState: apiState });
+        }
+      } catch (error) {
+        console.error(error);
       }
+    } else {
+      console.log("else block hit, this is apiSate: ", apiState)
     }
   };
   const handlers = {
@@ -342,10 +308,10 @@ chrome.runtime.onMessage.addListener((req, _, sendResponse) => {
     },
     makeIdle: () => {
       apiState = API_STATES.IDLE;
-      sendResponse({message: "changed"})
+      sendResponse({ message: "changed" });
     },
     addEvents: () => genericHandler("addEvents"),
-    deleteCalendar: () => genericHandler("deleteCalendar"),
+    delCal: () => genericHandler("delCal"),
   };
 
   const reqKey = Object.keys(req)[0];
@@ -355,4 +321,11 @@ chrome.runtime.onMessage.addListener((req, _, sendResponse) => {
   }
 
   sendResponse({ ready: false });
-});
+};
+
+chrome.webRequest.onHeadersReceived.addListener(
+  onHeadersReceivedCallback,
+  filter,
+  []
+);
+chrome.runtime.onMessage.addListener(onMessageCallback);

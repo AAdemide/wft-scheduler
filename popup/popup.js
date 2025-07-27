@@ -51,14 +51,16 @@ function apiStatePoll(message, page, button, timeout = 5000) {
   const poller = setInterval(() => {
     chrome.runtime.sendMessage(message, (res) => {
       console.log("response received in popup.js", res);
-      const apiState = res.apiState;
+      const {apiState, nextPage} = res;
+      console.log(res)
       // console.log("waiting for poll", res, message);
       if (apiState === "waiting") {
         // console.log("waiting for something");
-      } else if (apiState === "success") {
-        changePage(page);
+      } else if (nextPage) {
+        console.log("page is changing");
         button.disabled = false;
         clearInterval(poller);
+        changePage(page);
       } else if (apiState === "failed") {
         button.disabled = false;
         clearInterval(poller);
@@ -84,9 +86,10 @@ window.onload = async function () {
         if (res.ready) {
           clearInterval(loginChecker);
           changePage(Pages.FORM);
-        } else {
-          changePage(Pages.HOME);
-        }
+        } 
+        // else {
+        //   changePage(Pages.HOME);
+        // }
       });
     }, interval);
   }
@@ -111,6 +114,6 @@ window.onload = async function () {
 
     deleteCalButton.disabled = true;
 
-    apiStatePoll({ deleteCalendar: true, calID }, Pages.FORM, deleteCalButton);
+    apiStatePoll({ delCal: true, calID }, Pages.FORM, deleteCalButton);
   };
 };
