@@ -15,6 +15,15 @@ const AUTH_STATES = {
   AUTH_SUCCESS: "auth_success",
 };
 let authState = AUTH_STATES.UNAUTHENTICATED;
+
+const THD_AUTH_STATES = {
+  IDLE: "idle",
+  AUTHENTICATING: "authenticating",
+  AUTH_FAILED: "auth_failed",
+  AUTH_SUCCESS: "auth_success",
+};
+let thdAuthState = THD_AUTH_STATES.IDLE;
+
 const API_STATES = {
   FAILED: "failed", //failed validation or adding events
   SUCCESS: "success", //failed validation or adding events
@@ -23,6 +32,46 @@ const API_STATES = {
 };
 //apiStates: -1 if failed (validating or adding events); 0 if waiting (validating or adding events); 1 if validated successfully ;2 if added successfully; undefined as the initial state and the reset state
 let apiState = API_STATES.IDLE;
+
+async function fetchUserData() {
+  try {
+    // console.log(
+    //   `summary:${urls.summary}\ndetails: ${urls.details}\nweekly:${urls.weekly}\nuser details: ${urls.userDetails}`
+    // );
+    if (await urls.gottenAllUrls()) {
+      thdAuthState = THD_AUTH_STATES.AUTHENTICATING;
+      swDisabled = true;
+      const results = await Promise.all([
+        fetch(urls.summary),
+        fetch(urls.details),
+        fetch(urls.weekly),
+        fetch(urls.userDetails),
+      ]);
+
+
+      const [summary, details, weekly, userDetails] = await Promise.all(
+        results.map((r) => r.json())
+      );
+      fetchedJsons = {
+        summary,
+        details,
+        weekly,
+        userDetails
+      };
+      thdAuthState = THD_AUTH_STATES.AUTH_SUCCESS;
+      return true;
+    } else {
+      thdAuthState = THD_AUTH_STATES.AUTH_FAILED;
+      return false;
+    }
+  } catch (err) {
+    thdAuthState = THD_AUTH_STATES.AUTH_FAILED;
+    urls.clearAllUrls();
+    console.log(err);
+  }
+  swDisabled = false;
+  return false;
+}
 
 let globalInit = {
   async: true,
@@ -36,11 +85,44 @@ let urls = {
   summary: "",
   details: "",
   weekly: "",
+  userDetails: "",
   summaryMatch: (url) => regexp.summaryRegExp.test(url) && !swDisabled,
   detailsMatch: (url) => regexp.detailsRegExp.test(url) && !swDisabled,
   weeklyMatch: (url) => regexp.weeklyRegExp.test(url) && !swDisabled,
-  gottenAllUrls() {
-    return this.summary && this.details && this.weekly && !swDisabled;
+  userDetailsMatch: (url) => regexp.userDetailsRegExp.test(url) && !swDisabled,
+  async gottenAllUrls() {
+    const myUrls = await chrome.storage.session.get("urls");
+    if (myUrls?.urls?.summary) {
+      this.summary = myUrls.urls.summary;
+      this.details = myUrls.urls.details;
+      this.weekly = myUrls.urls.weekly;
+      this.userDetails = myUrls.urls.userDetails;
+      return true;
+    }
+    const result =
+      this.summary !== "" &&
+      this.details !== "" &&
+      this.weekly !== "" &&
+      this.userDetails !== "";
+    if (result) {
+      console.log("setting session storage");
+
+      chrome.storage.session.set({
+        urls: {
+          summary: this.summary,
+          details: this.details,
+          weekly: this.weekly,
+          userDetails: this.userDetails,
+        },
+      });
+    }
+    return result && !swDisabled;
+  },
+  clearAllUrls() {
+    this.summary = "";
+    this.details = "";
+    this.weekly = "";
+    this.userDetails = "";
   },
 };
 
@@ -48,7 +130,7 @@ async function makeCalendar() {
   let init = { ...globalInit };
   init.method = "POST";
   init.body = JSON.stringify({
-    summary: "Username's WFT Calendar",
+    summary: `${fetchUserData.userDetails.firstName} ${fetchUserData.userDetails.lastName}'s WFT Calendar`,
     description: "A calendar of your work schedule at The Home Depot",
   });
 
@@ -73,7 +155,10 @@ async function deleteCalendar(calIds) {
   const results = await Promise.allSettled(
     calIds.map((id) =>
       fetch(`https://www.googleapis.com/calendar/v3/calendars/${id}`, init)
-        .then((res) => ({ id, ok: res.ok }))
+        .then((res) => {
+          console.log(res.status);
+          return { id, status: res.status };
+        })
         .catch((err) => {
           console.log(err);
           return { id, error: err };
@@ -88,7 +173,11 @@ async function deleteCalendar(calIds) {
 
   for (const result of results) {
     if (result.status === "fulfilled") {
-      if (result.value.ok) {
+      if (
+        result.value.status == 200 ||
+        result.value.status == 204 ||
+        result.value.status == 404
+      ) {
         succeeded.push(result.value.id);
       } else {
         failed.push(result.value.id);
@@ -105,9 +194,11 @@ async function deleteCalendar(calIds) {
   } else if (failed.length > 0) {
     apiState = API_STATES.FAILED;
     console.warn("Failed to remove calendars:", failed);
-  } else {
-    apiState = API_STATES.IDLE;
   }
+
+  // else {
+  //   apiState = API_STATES.IDLE;
+  // }
 }
 
 //adds calendar to users calendar list
@@ -227,47 +318,27 @@ async function authenticate() {
   }
 }
 
-const onHeadersReceivedCallback = (details) => {
-  apiState = API_STATES.WAITING;
+const onHeadersReceivedCallback = async (details) => {
   const currUrl = details.url;
 
+  //BUG: error in console when wft logs out url start from identity.homedepot.com/idp [exact redirect url: https://identity.homedepot.com/idp/DRON2_2tHsN/resume/idp/startSLO.ping]
+
+  fetchUserData();
+
+  // console.log(currUrl, "matches summaryURL:", urls.summaryMatch(currUrl), "swDisabled", swDisabled);
   if (urls.summaryMatch(currUrl)) urls.summary = currUrl;
   else if (urls.detailsMatch(currUrl)) urls.details = currUrl;
   else if (urls.weeklyMatch(currUrl)) urls.weekly = currUrl;
-
-  //BUG: error in console when wft logs out url start from identity.homedepot.com/idp [exact redirect url: https://identity.homedepot.com/idp/DRON2_2tHsN/resume/idp/startSLO.ping]
-  if (urls.gottenAllUrls()) {
-    swDisabled = true;
-    (() => {
-      Promise.all([
-        fetch(urls.summary),
-        fetch(urls.details),
-        fetch(urls.weekly),
-      ])
-        .then((results) => {
-          return Promise.all(results.map((r) => r.json()));
-        })
-        .then(([summary, details, weekly]) => {
-          fetchedJsons = {
-            summary: { ...summary },
-            details: { ...details },
-            weekly: { ...weekly },
-          };
-          swDisabled = false;
-          apiState = API_STATES.SUCCESS;
-        })
-        .catch((err) => {
-          apiState = API_STATES.FAILED;
-          console.log(err);
-        });
-    })();
-  }
+  else if (urls.userDetailsMatch(currUrl)) urls.userDetails = currUrl;
 };
 
 const onMessageCallback = (req, _, sendResponse) => {
   const genericHandler = async (event) => {
     const actions = {
       addEvents: async () => {
+        if (apiState == API_STATES.WAITING) {
+          return apiState;
+        }
         return await addEventsToCalendar(
           parseDays(fetchedJsons.details.days),
           req.formData,
@@ -275,40 +346,68 @@ const onMessageCallback = (req, _, sendResponse) => {
         );
       },
       delCal: async () => {
+        if (apiState == API_STATES.WAITING) {
+          return apiState;
+        }
         return await deleteCalendar([req.calID]);
       },
     };
-
+    // console.log(authState, thdAuthState,timer?.tokenValid());
     if (
       authState == AUTH_STATES.UNAUTHENTICATED ||
       authState == AUTH_STATES.AUTH_FAILED
     ) {
       if (!timer?.tokenValid()) authenticate();
-    } else if (apiState == API_STATES.SUCCESS && timer?.tokenValid()) {
+    } else if (timer?.tokenValid() && authState == AUTH_STATES.AUTH_SUCCESS) {
       try {
-        console.log(event)
-        await actions[event]();
-        if (apiState == API_STATES.SUCCESS)
-          sendResponse({ nextPage: true, apiState: apiState });
-        else {
-          sendResponse({ [event]: "failed", apiState: apiState });
+        console.log(event);
+        if (thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS || event == "delCal") {
+          await actions[event]();
+
+          if (apiState == API_STATES.SUCCESS) {
+            if (thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS) {
+              if (event == "addEvents") {
+                sendResponse({ nextPage: "calendar", apiState: apiState });
+              } else {
+                sendResponse({ nextPage: "form", apiState: apiState });
+              }
+            } else {
+              sendResponse({ nextPage: "instructions", apiState: apiState });
+            }
+          } else {
+            sendResponse({ [event]: apiState });
+          }
         }
       } catch (error) {
         console.error(error);
       }
-    } else {
-      console.log("else block hit, this is apiSate: ", apiState)
     }
+
+    // else {
+    //   console.log("else block hit, this is apiSate and thdAuthState: ", apiState, ", ", thdAuthState)
+    // }
   };
   const handlers = {
     questionReady: () => {
-      if (Object.keys(fetchedJsons).length != 0) {
+      fetchUserData();
+      if (thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS) {
+        // sendResponse({ nextPage: "form" });
         sendResponse({ ready: true });
+      } else if (thdAuthState == THD_AUTH_STATES.AUTHENTICATING) {
+        console.log("else if block");
+        sendResponse({ nextPage: "loading" });
+      } else if (thdAuthState == THD_AUTH_STATES.AUTH_FAILED) {
+        console.log(apiState, thdAuthState);
+        sendResponse({ nextPage: "instructions" });
+      } else {
+        console.log("else block");
+        sendResponse({ nextPage: "loading" });
       }
     },
     makeIdle: () => {
       apiState = API_STATES.IDLE;
-      sendResponse({ message: "changed" });
+      // thdAuthState = THD_AUTH_STATES.UNAUTHENTICATED;
+      sendResponse({ message: "apiState idle" });
     },
     addEvents: () => genericHandler("addEvents"),
     delCal: () => genericHandler("delCal"),
@@ -320,7 +419,7 @@ const onMessageCallback = (req, _, sendResponse) => {
     return true;
   }
 
-  sendResponse({ ready: false });
+  sendResponse({ ready: false, next: "loading" });
 };
 
 chrome.webRequest.onHeadersReceived.addListener(

@@ -1,0 +1,148 @@
+* {
+  margin: 0;
+  box-sizing: border-box;
+}
+
+body,
+html {
+  height: 225px;
+  width: 250px;
+  background-color: #1a1a1a;
+  color: white;
+  font-size: 0.925rem;
+}
+
+a {
+  color: #ff3d00;
+}
+
+input,
+select {
+  font-size: 0.95rem;
+  display: block;
+  margin-top: 0.35rem;
+}
+
+button {
+  background-color: transparent;
+  border: 2px solid white;
+  color: #ff3d00;
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: inline flex;
+  width: 80%;
+  justify-content: center;
+  align-items: center;
+  border-radius: 0.25rem;
+  padding: 0.3rem 0.5rem;
+  word-break: keep-all;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.5s ease-in-out;
+  user-select: none;
+}
+button:hover {
+  background-color: white;
+  box-shadow: 0 0 7px 2px rgba(255, 255, 255, 0.7);
+}
+button:disabled {
+  border: none;
+}
+button:disabled:after {
+  content: "";
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  background-color: rgba(128, 128, 128, 0.556);
+  border-radius: 0.25rem;
+  border: 2px solid rgba(128, 128, 128, 0.556);
+  cursor: not-allowed;
+}
+button:disabled > img::before {
+  background-color: gray;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.gcal-icon {
+  height: 1.15rem;
+}
+
+#instruction-page {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  text-align: center;
+  flex-direction: column;
+  padding: 1rem;
+}
+
+#calendar-made-page {
+  width: 100%;
+  height: 100%;
+}
+
+#form-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  gap: 1rem;
+  padding: 0.5rem;
+
+  label {
+    display: block;
+  }
+
+  .form__inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+}
+
+#loader-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.loader {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: inline-block;
+  border-top: 4px solid #fff;
+  border-right: 4px solid transparent;
+  box-sizing: border-box;
+  animation: rotation 1s linear infinite;
+}
+.loader::after {
+  content: "";
+  box-sizing: border-box;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border-left: 4px solid #ff3d00;
+  border-bottom: 4px solid transparent;
+  animation: rotation 0.5s linear infinite reverse;
+}
+@keyframes rotation {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}

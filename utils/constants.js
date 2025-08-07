@@ -8,16 +8,17 @@ export const defaultReminder = [
 ];
 
 const auth_params = {
-  client_id:
-    (chrome.runtime.getManifest()).oauth2.client_id,
+  client_id: chrome.runtime.getManifest().oauth2.client_id,
   redirect_uri: chrome.identity.getRedirectURL(),
   response_type: "token",
   scope: "https://www.googleapis.com/auth/calendar",
 };
-export function getAuthURL(promptConsent=false) {
+export function getAuthURL(promptConsent = false) {
   let url;
   if (promptConsent)
-    url = new URLSearchParams(Object.entries({...auth_params, prompt: "consent"}));
+    url = new URLSearchParams(
+      Object.entries({ ...auth_params, prompt: "consent" })
+    );
   else {
     url = new URLSearchParams(Object.entries(auth_params));
   }
@@ -31,6 +32,7 @@ export const regexp = {
     /https:\/\/wft.homedepot.com\/missioncontrol\/v1\/schedule\/([0-9]+)\/details*/,
   weeklyRegExp:
     /https:\/\/wft.homedepot.com\/missioncontrol\/v1\/timecards\/([0-9]+)\/weekly*/,
+  userDetailsRegExp: /https:\/\/wft.homedepot.com\/missioncontrol\/v1\/user\/details*/,
 };
 
 export const filter = { urls: ["https://wft.homedepot.com/*"] };
