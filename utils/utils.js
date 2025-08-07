@@ -89,7 +89,6 @@ const isPreviousDay = (day) => {
 
   const temp = [parseInt(prevDay.split("/").reverse().join("")), parseInt(now.split("/").reverse().join(""))]
 
-  console.log(temp)
   return  temp[0] < temp[1]
 
 }
@@ -102,7 +101,7 @@ export const parseDays = (days) => {
       continue;
     }
 
-    console.log("day: ", day)
+    // console.log("day: ", day)
     // const day = days[d];
     let event = {
       start: {

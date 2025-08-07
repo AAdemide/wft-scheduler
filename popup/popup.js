@@ -32,11 +32,6 @@ async function getCalId() {
 
 function changePage(page) {
   console.log("changed to page", page);
-  // form.classList.add("hidden");
-  // loading.classList.remove("hidden");
-  //   calendarMade.classList.add("hidden");
-  //   home.classList.add("hidden");
-
 
   if (page == Pages.CALENDAR) {
     calendarMade.classList.remove("hidden");
@@ -55,41 +50,46 @@ function changePage(page) {
     loading.classList.add("hidden");
 
     chrome.runtime.sendMessage({ makeIdle: true }, () => {});
-  } 
-  // else if (page == Pages.LOADING) {
-  //   form.classList.add("hidden");
-  //   calendarMade.classList.add("hidden");
-  //   home.classList.add("hidden");
-  //   loading.classList.remove("hidden");
-  // }
+  } else if (page == Pages.LOADING) {
+    form.classList.add("hidden");
+    calendarMade.classList.add("hidden");
+    home.classList.add("hidden");
+    loading.classList.remove("hidden");
+  }
 }
 
 function apiStatePoll(message, button, timeout = 5000) {
   const startTime = Date.now();
-  changePage(Pages.LOADING);
   const poller = setInterval(() => {
     chrome.runtime.sendMessage(message, (res) => {
-      console.log("response received in popup.js", res);
-      const {apiState, nextPage} = res ?? {};
-      console.log(res)
+      console.log(
+        "polling with message:",
+        message,
+        "\n",
+        "response received in popup.js",
+        res
+      );
+      const { apiState, nextPage } = res ?? {};
       // console.log("waiting for poll", res, message);
       if (nextPage) {
-        console.log("polling should stop");
-        button.disabled = false;
+        // button.disabled = false;
         // changePage(Pages.LOADING);
-        clearInterval(poller);
+        if (nextPage != "instructions" && nextPage != "loading") {
+          console.log("polling should stop");
+          // console.log(nextPage)
+          clearInterval(poller);
+        }
         changePage(nextPage);
       } else if (apiState === "failed") {
-        button.disabled = false;
+        // button.disabled = false;
         clearInterval(poller);
       } else if (Date.now() - startTime > timeout) {
         console.log("Timeout reached, stopping poll");
-        button.disabled = false;
+        // button.disabled = false;
         clearInterval(poller);
-      } 
-      // else {
-      //   changePage(Pages.LOADING);
-      // }
+      } else if (apiState === "waiting") {
+        changePage(Pages.LOADING);
+      }
     });
   }, interval);
 }
@@ -99,47 +99,44 @@ window.onload = async function () {
   calID = await getCalId();
 
   if (calID) {
-    console.log(calID)
+    // console.log(calID);
     changePage(Pages.CALENDAR);
   } else {
-    const loginChecker = setInterval(() => {
-      chrome.runtime.sendMessage({ questionReady: true }, (res) => {
-        console.log("ready to fetch:", res);
-        if (res.ready) {
-          changePage(Pages.FORM);
-          clearInterval(loginChecker);
-        } 
-        else if(res.nextPage == Pages.INSTRUCTIONS) {
-          changePage(Pages.INSTRUCTIONS);
-          // clearInterval(loginChecker);
-        } else {
-          changePage(Pages.LOADING);
-          // clearInterval(loginChecker);
-        }
-      });
-    }, interval);
+    apiStatePoll({ questionReady: true }, undefined, undefined);
+    // const loginChecker = setInterval(() => {
+    //   chrome.runtime.sendMessage({ questionReady: true }, (res) => {
+    //     console.log("ready to fetch:", res);
+    //     if (res.ready) {
+    //       changePage(Pages.FORM);
+    //       clearInterval(loginChecker);
+    //     }
+    //     else if(res.nextPage == Pages.INSTRUCTIONS) {
+    //       changePage(Pages.INSTRUCTIONS);
+    //       // clearInterval(loginChecker);
+    //     } else {
+    //       changePage(Pages.LOADING);
+    //       // clearInterval(loginChecker);
+    //     }
+    //   });
+    // }, interval);
   }
 
   form.onsubmit = async (event) => {
     event.preventDefault();
-    formButton.disabled = true;
+    // formButton.disabled = true;
 
     calID = await getCalId();
 
     const formData = getFormData();
 
-    apiStatePoll(
-      { addEvents: true, formData, calID },
-      Pages.CALENDAR,
-      formButton
-    );
+    apiStatePoll({ addEvents: true, formData, calID }, formButton);
   };
 
   deleteCalButton.onclick = async () => {
     calID = await getCalId();
 
-    deleteCalButton.disabled = true;
+    // deleteCalButton.disabled = true;
 
-    apiStatePoll({ delCal: true, calID }, Pages.FORM, deleteCalButton);
+    apiStatePoll({ delCal: true, calID }, deleteCalButton);
   };
 };

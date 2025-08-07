@@ -34,43 +34,54 @@ const API_STATES = {
 let apiState = API_STATES.IDLE;
 
 async function fetchUserData() {
-  try {
-    // console.log(
-    //   `summary:${urls.summary}\ndetails: ${urls.details}\nweekly:${urls.weekly}\nuser details: ${urls.userDetails}`
-    // );
-    if (await urls.gottenAllUrls()) {
-      thdAuthState = THD_AUTH_STATES.AUTHENTICATING;
-      swDisabled = true;
-      const results = await Promise.all([
-        fetch(urls.summary),
-        fetch(urls.details),
-        fetch(urls.weekly),
-        fetch(urls.userDetails),
-      ]);
-
-
-      const [summary, details, weekly, userDetails] = await Promise.all(
-        results.map((r) => r.json())
-      );
-      fetchedJsons = {
-        summary,
-        details,
-        weekly,
-        userDetails
-      };
-      thdAuthState = THD_AUTH_STATES.AUTH_SUCCESS;
-      return true;
-    } else {
+  if(thdAuthState != THD_AUTH_STATES.AUTHENTICATING) {
+    try {
+      // console.log(
+      //   `summary:${urls.summary}\ndetails: ${urls.details}\nweekly:${urls.weekly}\nuser details: ${urls.userDetails}`
+      // );
+      if (await urls.gottenAllUrls()) {
+        thdAuthState = THD_AUTH_STATES.AUTHENTICATING;
+        swDisabled = true;
+        const results = await Promise.all([
+          fetch(urls.summary),
+          fetch(urls.details),
+          fetch(urls.weekly),
+          fetch(urls.userDetails),
+        ]);
+  
+        const [summary, details, weekly, userDetails] = await Promise.all(
+          results.map((r) => {
+            let res;
+            if (r.status === 200) {
+              console.log("json");
+              res = r.json()
+            } else {
+              console.log("not json");
+              res =  r.text()
+            }
+            return res;
+          })
+        );
+        fetchedJsons = {
+          summary,
+          details,
+          weekly,
+          userDetails,
+        };
+        thdAuthState = THD_AUTH_STATES.AUTH_SUCCESS;
+        return true;
+      } else {
+        thdAuthState = THD_AUTH_STATES.AUTH_FAILED;
+        return false;
+      }
+    } catch (err) {
       thdAuthState = THD_AUTH_STATES.AUTH_FAILED;
-      return false;
+      urls.clearAllUrls();
+      console.log(err);
     }
-  } catch (err) {
-    thdAuthState = THD_AUTH_STATES.AUTH_FAILED;
-    urls.clearAllUrls();
-    console.log(err);
+    swDisabled = false;
+    return false;
   }
-  swDisabled = false;
-  return false;
 }
 
 let globalInit = {
@@ -105,7 +116,7 @@ let urls = {
       this.weekly !== "" &&
       this.userDetails !== "";
     if (result) {
-      console.log("setting session storage");
+      console.log("setting session storage", fetchedJsons);
 
       chrome.storage.session.set({
         urls: {
@@ -142,7 +153,7 @@ async function makeCalendar() {
     const data = await res.json();
     const calendarID = JSON.parse(JSON.stringify(data)).id;
     chrome.storage.sync.set({ "WFT-Scheduler Calendar ID": calendarID });
-    console.log("calID:", calendarID);
+    // console.log("calID:", calendarID);
     return calendarID;
   } catch (error) {
     console.error("There was an error while making the calendar:", err);
@@ -156,7 +167,7 @@ async function deleteCalendar(calIds) {
     calIds.map((id) =>
       fetch(`https://www.googleapis.com/calendar/v3/calendars/${id}`, init)
         .then((res) => {
-          console.log(res.status);
+          // console.log(res.status);
           return { id, status: res.status };
         })
         .catch((err) => {
@@ -166,7 +177,7 @@ async function deleteCalendar(calIds) {
     )
   );
 
-  console.log(results);
+  // console.log(results);
 
   const failed = [];
   const succeeded = [];
@@ -270,7 +281,7 @@ function getOAuthToken() {
     // if(apiState==API_STATES.AUTH_FAILED) {
     // chrome.identity.removeCachedAuthToken({token:oldToken});
     // }
-    console.log("globalInit", globalInit);
+    // console.log("globalInit", globalInit);
     chrome.identity.launchWebAuthFlow(
       {
         url:
@@ -335,24 +346,17 @@ const onHeadersReceivedCallback = async (details) => {
 const onMessageCallback = (req, _, sendResponse) => {
   const genericHandler = async (event) => {
     const actions = {
-      addEvents: async () => {
-        if (apiState == API_STATES.WAITING) {
-          return apiState;
-        }
-        return await addEventsToCalendar(
+      addEvents: () => {
+        addEventsToCalendar(
           parseDays(fetchedJsons.details.days),
           req.formData,
           req.calID
         );
       },
       delCal: async () => {
-        if (apiState == API_STATES.WAITING) {
-          return apiState;
-        }
-        return await deleteCalendar([req.calID]);
+        deleteCalendar([req.calID]);
       },
     };
-    // console.log(authState, thdAuthState,timer?.tokenValid());
     if (
       authState == AUTH_STATES.UNAUTHENTICATED ||
       authState == AUTH_STATES.AUTH_FAILED
@@ -360,9 +364,9 @@ const onMessageCallback = (req, _, sendResponse) => {
       if (!timer?.tokenValid()) authenticate();
     } else if (timer?.tokenValid() && authState == AUTH_STATES.AUTH_SUCCESS) {
       try {
-        console.log(event);
+        // console.log(event);
         if (thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS || event == "delCal") {
-          await actions[event]();
+          actions[event]();
 
           if (apiState == API_STATES.SUCCESS) {
             if (thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS) {
@@ -375,7 +379,7 @@ const onMessageCallback = (req, _, sendResponse) => {
               sendResponse({ nextPage: "instructions", apiState: apiState });
             }
           } else {
-            sendResponse({ [event]: apiState });
+            sendResponse({ apiState });
           }
         }
       } catch (error) {
@@ -391,18 +395,18 @@ const onMessageCallback = (req, _, sendResponse) => {
     questionReady: () => {
       fetchUserData();
       if (thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS) {
-        // sendResponse({ nextPage: "form" });
-        sendResponse({ ready: true });
+        sendResponse({ ready: true, nextPage: "form" });
       } else if (thdAuthState == THD_AUTH_STATES.AUTHENTICATING) {
-        console.log("else if block");
+        // console.log("else if block");
         sendResponse({ nextPage: "loading" });
       } else if (thdAuthState == THD_AUTH_STATES.AUTH_FAILED) {
-        console.log(apiState, thdAuthState);
+        // console.log(apiState, thdAuthState);
         sendResponse({ nextPage: "instructions" });
-      } else {
-        console.log("else block");
-        sendResponse({ nextPage: "loading" });
-      }
+      } 
+      // else {
+      //   // console.log("else block", apiState, thdAuthState, authState);
+      //   sendResponse({ nextPage: "loading" });
+      // }
     },
     makeIdle: () => {
       apiState = API_STATES.IDLE;
@@ -419,7 +423,7 @@ const onMessageCallback = (req, _, sendResponse) => {
     return true;
   }
 
-  sendResponse({ ready: false, next: "loading" });
+  sendResponse({ ready: false, nextPage: "instructions" });
 };
 
 chrome.webRequest.onHeadersReceived.addListener(
