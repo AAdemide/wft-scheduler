@@ -5,6 +5,7 @@ const calendarMade = document.querySelector("#calendar-made-page");
 const deleteCalButton = document.querySelector("#delete-calendar");
 const loading = document.querySelector("#loader-page");
 const form = document.querySelector("#form-page");
+const failedPage = document.querySelector("#failed-page");
 const formButton = form.querySelector("#form-submit");
 let calID = {};
 const interval = 100;
@@ -15,6 +16,7 @@ const Pages = {
   CALENDAR: "calendar",
   INSTRUCTIONS: "instructions",
   LOADING: "loading",
+  FAILED: "failed",
 };
 
 function getFormData() {
@@ -38,23 +40,33 @@ function changePage(page) {
     form.classList.add("hidden");
     home.classList.add("hidden");
     loading.classList.add("hidden");
+    failedPage.classList.add("hidden");
   } else if (page == Pages.FORM) {
     form.classList.remove("hidden");
     calendarMade.classList.add("hidden");
     home.classList.add("hidden");
     loading.classList.add("hidden");
+    failedPage.classList.add("hidden");
   } else if (page == Pages.INSTRUCTIONS) {
     home.classList.remove("hidden");
     form.classList.add("hidden");
     calendarMade.classList.add("hidden");
     loading.classList.add("hidden");
+    failedPage.classList.add("hidden");
 
     chrome.runtime.sendMessage({ makeIdle: true }, () => {});
   } else if (page == Pages.LOADING) {
     form.classList.add("hidden");
     calendarMade.classList.add("hidden");
     home.classList.add("hidden");
+    failedPage.classList.add("hidden");
     loading.classList.remove("hidden");
+  } else if (page == Pages.FAILED) {
+    form.classList.add("hidden");
+    calendarMade.classList.add("hidden");
+    home.classList.add("hidden");
+    loading.classList.add("hidden");
+    failedPage.classList.remove("hidden");
   }
 }
 
@@ -71,7 +83,11 @@ function apiStatePoll(message, button, timeout = 5000) {
       );
       const { apiState, nextPage } = res ?? {};
       // console.log("waiting for poll", res, message);
-      if (nextPage) {
+      if (apiState === "failed") {
+        // button.disabled = false;
+        clearInterval(poller);
+        changePage(Pages.FAILED)
+      } else if (nextPage) {
         // button.disabled = false;
         // changePage(Pages.LOADING);
         if (nextPage != "instructions" && nextPage != "loading") {
@@ -80,14 +96,13 @@ function apiStatePoll(message, button, timeout = 5000) {
           clearInterval(poller);
         }
         changePage(nextPage);
-      } else if (apiState === "failed") {
-        // button.disabled = false;
-        clearInterval(poller);
-      } else if (Date.now() - startTime > timeout) {
-        console.log("Timeout reached, stopping poll");
-        // button.disabled = false;
-        clearInterval(poller);
-      } else if (apiState === "waiting") {
+      }
+      // else if (Date.now() - startTime > timeout) {
+      //   console.log("Timeout reached, stopping poll");
+      //   // button.disabled = false;
+      //   clearInterval(poller);
+      // }
+      else if (apiState === "waiting") {
         changePage(Pages.LOADING);
       }
     });
@@ -99,7 +114,7 @@ window.onload = async function () {
   calID = await getCalId();
 
   if (calID) {
-    // console.log(calID);
+    console.log(calID);
     changePage(Pages.CALENDAR);
   } else {
     apiStatePoll({ questionReady: true }, undefined, undefined);

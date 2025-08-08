@@ -34,7 +34,7 @@ const API_STATES = {
 let apiState = API_STATES.IDLE;
 
 async function fetchUserData() {
-  if(thdAuthState != THD_AUTH_STATES.AUTHENTICATING) {
+  if (thdAuthState != THD_AUTH_STATES.AUTHENTICATING) {
     try {
       // console.log(
       //   `summary:${urls.summary}\ndetails: ${urls.details}\nweekly:${urls.weekly}\nuser details: ${urls.userDetails}`
@@ -48,16 +48,16 @@ async function fetchUserData() {
           fetch(urls.weekly),
           fetch(urls.userDetails),
         ]);
-  
+
         const [summary, details, weekly, userDetails] = await Promise.all(
-          results.map((r) => {
+          results.map(async (r) => {
             let res;
             if (r.status === 200) {
-              console.log("json");
-              res = r.json()
+              res = await r.json();
+              console.log("json", res);
             } else {
-              console.log("not json");
-              res =  r.text()
+              res = await r.text();
+              console.log("not json", res);
             }
             return res;
           })
@@ -138,28 +138,29 @@ let urls = {
 };
 
 async function makeCalendar() {
+  // console.log(`${fetchedJsons.userDetails.firstName} ${fetchedJsons.userDetails.lastName}'s WFT Calendar`)
   let init = { ...globalInit };
   init.method = "POST";
   init.body = JSON.stringify({
-    summary: `${fetchUserData.userDetails.firstName} ${fetchUserData.userDetails.lastName}'s WFT Calendar`,
+    summary: `${fetchedJsons.userDetails.firstName} ${fetchedJsons.userDetails.lastName}'s WFT Calendar`,
     description: "A calendar of your work schedule at The Home Depot",
   });
-
-  try {
-    const res = await fetch(
-      "https://www.googleapis.com/calendar/v3/calendars",
-      init
-    );
-    const data = await res.json();
-    const calendarID = JSON.parse(JSON.stringify(data)).id;
-    chrome.storage.sync.set({ "WFT-Scheduler Calendar ID": calendarID });
-    // console.log("calID:", calendarID);
-    return calendarID;
-  } catch (error) {
-    console.error("There was an error while making the calendar:", err);
+  const res = await fetch(
+    "https://www.googleapis.com/calendar/v3/calendars",
+    init
+  );
+  const data = await res.json();
+  if (data.error) {
+    throw new Error(JSON.stringify(data.error));
   }
+  console.log(data);
+  const calendarID = JSON.parse(JSON.stringify(data)).id;
+  chrome.storage.sync.set({ "WFT-Scheduler Calendar ID": calendarID });
+  console.log("calID:", calendarID);
+  return calendarID;
 }
 async function deleteCalendar(calIds) {
+  console.log("from delete calendar", apiState);
   apiState = API_STATES.WAITING;
   const init = { ...globalInit, method: "DELETE" };
 
@@ -222,31 +223,31 @@ async function addToCalendarList(reminder = constants.defaultReminder, calID) {
     foregroundColor: "#FFFFFF",
     defaultReminders: reminder,
   });
-  try {
-    const _res = await fetch(
-      "https://www.googleapis.com/calendar/v3/users/me/calendarList?colorRgbFormat=true",
-      init
-    );
-  } catch (error) {
-    console.error(
-      "There was an error while adding calendar to calendar list",
-      error
-    );
+
+  const res = await fetch(
+    "https://www.googleapis.com/calendar/v3/users/me/calendarList?colorRgbFormat=true",
+    init
+  );
+  const data = await res.json();
+  if (data.error) {
+    throw new Error(JSON.stringify(data.error));
   }
 }
 
 async function addEventsToCalendar(events, formData, calID) {
+  // if (!calID) {
+  console.log("I'm supposed to add events and should be called once");
   apiState = API_STATES.WAITING;
-  if (!calID) {
-    try {
-      calID = await makeCalendar();
-      addToCalendarList(
-        { method: formData.method, minutes: formData.minutes },
-        calID
-      );
-    } catch (error) {
-      apiState = API_STATES.FAILED;
-    }
+  try {
+    const calID = await makeCalendar();
+    addToCalendarList(
+      { method: formData.method, minutes: formData.minutes },
+      calID
+    );
+    apiState = API_STATES.SUCCESS;
+  } catch (error) {
+    console.warn(error);
+    apiState = API_STATES.FAILED;
   }
 
   let init = { ...globalInit };
@@ -267,11 +268,11 @@ async function addEventsToCalendar(events, formData, calID) {
   )
     .then((res) => res.map((i) => i.json()))
     .then((data) => {
-      // console.log(JSON.parse(JSON.stringify(data)));
+      console.log(JSON.parse(JSON.stringify(data)));
       apiState = API_STATES.SUCCESS;
     })
     .catch((err) => {
-      console.log(err);
+      console.warn(err);
       apiState = API_STATES.FAILED;
     });
 }
@@ -334,7 +335,9 @@ const onHeadersReceivedCallback = async (details) => {
 
   //BUG: error in console when wft logs out url start from identity.homedepot.com/idp [exact redirect url: https://identity.homedepot.com/idp/DRON2_2tHsN/resume/idp/startSLO.ping]
 
-  fetchUserData();
+  if (!fetchedJsons.userDetails?.firstName) {
+    fetchUserData();
+  }
 
   // console.log(currUrl, "matches summaryURL:", urls.summaryMatch(currUrl), "swDisabled", swDisabled);
   if (urls.summaryMatch(currUrl)) urls.summary = currUrl;
@@ -347,14 +350,19 @@ const onMessageCallback = (req, _, sendResponse) => {
   const genericHandler = async (event) => {
     const actions = {
       addEvents: () => {
-        addEventsToCalendar(
-          parseDays(fetchedJsons.details.days),
-          req.formData,
-          req.calID
-        );
+        // console.log(req.calID)
+        if (apiState != API_STATES.WAITING && apiState != API_STATES.FAILED) {
+          console.log(apiState);
+          addEventsToCalendar(
+            parseDays(fetchedJsons.details.days),
+            req.formData
+          );
+        }
       },
       delCal: async () => {
-        deleteCalendar([req.calID]);
+        if (apiState != API_STATES.WAITING && apiState != API_STATES.FAILED) {
+          deleteCalendar([req.calID]);
+        }
       },
     };
     if (
@@ -402,7 +410,7 @@ const onMessageCallback = (req, _, sendResponse) => {
       } else if (thdAuthState == THD_AUTH_STATES.AUTH_FAILED) {
         // console.log(apiState, thdAuthState);
         sendResponse({ nextPage: "instructions" });
-      } 
+      }
       // else {
       //   // console.log("else block", apiState, thdAuthState, authState);
       //   sendResponse({ nextPage: "loading" });
