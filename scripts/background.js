@@ -142,7 +142,9 @@ async function makeCalendar() {
   let init = { ...globalInit };
   init.method = "POST";
   init.body = JSON.stringify({
-    summary: `${fetchedJsons.userDetails.firstName} ${fetchedJsons.userDetails.lastName}'s WFT Calendar`,
+    summary: `${fetchedJsons.userDetails.firstName ?? ""} ${
+      fetchedJsons.userDetails.lastName ?? ""
+    }'s WFT Calendar`,
     description: "A calendar of your work schedule at The Home Depot",
   });
   const res = await fetch(
@@ -150,25 +152,23 @@ async function makeCalendar() {
     init
   );
   const data = await res.json();
+  console.log(data);
   if (data.error) {
     throw new Error(JSON.stringify(data.error));
   }
-  console.log(data);
   const calendarID = JSON.parse(JSON.stringify(data)).id;
   chrome.storage.sync.set({ "WFT-Scheduler Calendar ID": calendarID });
-  console.log("calID:", calendarID);
   return calendarID;
 }
 async function deleteCalendar(calIds) {
   console.log("from delete calendar", apiState);
   apiState = API_STATES.WAITING;
   const init = { ...globalInit, method: "DELETE" };
-
   const results = await Promise.allSettled(
     calIds.map((id) =>
       fetch(`https://www.googleapis.com/calendar/v3/calendars/${id}`, init)
         .then((res) => {
-          // console.log(res.status);
+          console.log(res.status);
           return { id, status: res.status };
         })
         .catch((err) => {
@@ -178,7 +178,7 @@ async function deleteCalendar(calIds) {
     )
   );
 
-  // console.log(results);
+  console.log(results);
 
   const failed = [];
   const succeeded = [];
@@ -249,14 +249,16 @@ async function addEventsToCalendar(events, formData, calID) {
     console.warn(error);
     apiState = API_STATES.FAILED;
   }
-
+  // The HTTP headers for the outer batch request, except for the Content- headers such as Content-Type, apply to every request in the batch. If you specify a given HTTP header in both the outer request and an individual call, then the individual call header's value overrides the outer batch request header's value. The headers for an individual call apply only to that call.
   let init = { ...globalInit };
   const location = formData.location;
   init.method = "POST";
+  // console.log(events)
   return Promise.all(
     events.map((event) => {
       const body = JSON.stringify({ ...event, location });
-      // console.log("body: ", body)
+      console.log(body);
+      //Each part begins with its own Content-Type: application/http HTTP header.
       return fetch(
         `https://www.googleapis.com/calendar/v3/calendars/${calID}/events`,
         {
@@ -266,7 +268,15 @@ async function addEventsToCalendar(events, formData, calID) {
       );
     })
   )
-    .then((res) => res.map((i) => i.json()))
+    .then((res) =>
+      res.map((i) => {
+        console.log(i);
+        console.log(res.text());
+        const r = res.json();
+        return r;
+      })
+    )
+
     .then((data) => {
       console.log(JSON.parse(JSON.stringify(data)));
       apiState = API_STATES.SUCCESS;
@@ -350,43 +360,43 @@ const onMessageCallback = (req, _, sendResponse) => {
   const genericHandler = async (event) => {
     const actions = {
       addEvents: () => {
-        // console.log(req.calID)
-        if (apiState != API_STATES.WAITING && apiState != API_STATES.FAILED) {
-          console.log(apiState);
-          addEventsToCalendar(
-            parseDays(fetchedJsons.details.days),
-            req.formData
-          );
-        }
+        addEventsToCalendar(parseDays(fetchedJsons.details.days), req.formData);
       },
       delCal: async () => {
-        if (apiState != API_STATES.WAITING && apiState != API_STATES.FAILED) {
-          deleteCalendar([req.calID]);
-        }
+        deleteCalendar([req.calID]);
       },
     };
     if (
       authState == AUTH_STATES.UNAUTHENTICATED ||
       authState == AUTH_STATES.AUTH_FAILED
     ) {
+      console.log(authState, timer);
       if (!timer?.tokenValid()) authenticate();
     } else if (timer?.tokenValid() && authState == AUTH_STATES.AUTH_SUCCESS) {
       try {
+        console.log(apiState);
         // console.log(event);
         if (thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS || event == "delCal") {
-          actions[event]();
-
-          if (apiState == API_STATES.SUCCESS) {
+          if (apiState == API_STATES.IDLE) {
+            actions[event]();
+            console.log("what is going on ");
+          } else if (apiState == API_STATES.SUCCESS) {
+            console.log("what is going on ");
+            console.log(thdAuthState);
             if (thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS) {
               if (event == "addEvents") {
                 sendResponse({ nextPage: "calendar", apiState: apiState });
+                apiState = API_STATES.IDLE;
               } else {
                 sendResponse({ nextPage: "form", apiState: apiState });
+                apiState = API_STATES.IDLE;
               }
             } else {
               sendResponse({ nextPage: "instructions", apiState: apiState });
+              apiState = API_STATES.IDLE;
             }
           } else {
+            console.log(apiState);
             sendResponse({ apiState });
           }
         }
@@ -402,6 +412,13 @@ const onMessageCallback = (req, _, sendResponse) => {
   const handlers = {
     questionReady: () => {
       fetchUserData();
+      if (
+        authState == AUTH_STATES.UNAUTHENTICATED ||
+        authState == AUTH_STATES.AUTH_FAILED
+      ) {
+        console.log(authState, timer);
+        if (!timer?.tokenValid()) authenticate();
+      }
       if (thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS) {
         sendResponse({ ready: true, nextPage: "form" });
       } else if (thdAuthState == THD_AUTH_STATES.AUTHENTICATING) {
@@ -418,18 +435,18 @@ const onMessageCallback = (req, _, sendResponse) => {
     },
     makeIdle: () => {
       apiState = API_STATES.IDLE;
-      // thdAuthState = THD_AUTH_STATES.UNAUTHENTICATED;
-      sendResponse({ message: "apiState idle" });
     },
     addEvents: () => genericHandler("addEvents"),
     delCal: () => genericHandler("delCal"),
   };
 
-  const reqKey = Object.keys(req)[0];
-  if (handlers[reqKey]) {
-    handlers[reqKey]();
-    return true;
-  }
+  const reqKeys = Object.keys(req);
+  reqKeys.forEach((reqKey) => {
+    if (handlers[reqKey]) {
+      handlers[reqKey]();
+      return true;
+    }
+  });
 
   sendResponse({ ready: false, nextPage: "instructions" });
 };

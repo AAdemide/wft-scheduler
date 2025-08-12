@@ -33,7 +33,7 @@ async function getCalId() {
 }
 
 function changePage(page) {
-  console.log("changed to page", page);
+  // console.log("changed to page", page);
 
   if (page == Pages.CALENDAR) {
     calendarMade.classList.remove("hidden");
@@ -54,7 +54,7 @@ function changePage(page) {
     loading.classList.add("hidden");
     failedPage.classList.add("hidden");
 
-    chrome.runtime.sendMessage({ makeIdle: true }, () => {});
+    apiStatePoll({ makeIdle: true, questionReady: true });
   } else if (page == Pages.LOADING) {
     form.classList.add("hidden");
     calendarMade.classList.add("hidden");
@@ -70,29 +70,35 @@ function changePage(page) {
   }
 }
 
-function apiStatePoll(message, button, timeout = 5000) {
+function apiStatePoll(message, timeout = 5000) {
   const startTime = Date.now();
   const poller = setInterval(() => {
     chrome.runtime.sendMessage(message, (res) => {
-      console.log(
-        "polling with message:",
-        message,
-        "\n",
-        "response received in popup.js",
-        res
-      );
-      const { apiState, nextPage } = res ?? {};
-      // console.log("waiting for poll", res, message);
+      // console.log(
+      //   "polling with message:",
+      //   message,
+      //   "\n",
+      //   "response received in popup.js",
+      //   res
+      // );
+      const { apiState, nextPage, ready } = res ?? {};
+      // temporary ? solution
       if (apiState === "failed") {
         // button.disabled = false;
         clearInterval(poller);
-        changePage(Pages.FAILED)
-      } else if (nextPage) {
+        changePage(Pages.FAILED);
+      } else if (ready) {
+        //check if authState is successful (not done yet) and if there is a valid calendar ID, show the delete/update page
+        if (calID) {
+          clearInterval(poller);
+          changePage(Pages.CALENDAR);
+        }
+      }
+      // changes to the page requested by the background script
+      else if (nextPage) {
         // button.disabled = false;
-        // changePage(Pages.LOADING);
-        if (nextPage != "instructions" && nextPage != "loading") {
-          console.log("polling should stop");
-          // console.log(nextPage)
+        if (nextPage != "loading") {
+          // console.log("polling should stop");
           clearInterval(poller);
         }
         changePage(nextPage);
@@ -110,48 +116,20 @@ function apiStatePoll(message, button, timeout = 5000) {
 }
 
 window.onload = async function () {
-  //calID is private
   calID = await getCalId();
-
-  if (calID) {
-    console.log(calID);
-    changePage(Pages.CALENDAR);
-  } else {
-    apiStatePoll({ questionReady: true }, undefined, undefined);
-    // const loginChecker = setInterval(() => {
-    //   chrome.runtime.sendMessage({ questionReady: true }, (res) => {
-    //     console.log("ready to fetch:", res);
-    //     if (res.ready) {
-    //       changePage(Pages.FORM);
-    //       clearInterval(loginChecker);
-    //     }
-    //     else if(res.nextPage == Pages.INSTRUCTIONS) {
-    //       changePage(Pages.INSTRUCTIONS);
-    //       // clearInterval(loginChecker);
-    //     } else {
-    //       changePage(Pages.LOADING);
-    //       // clearInterval(loginChecker);
-    //     }
-    //   });
-    // }, interval);
-  }
+  apiStatePoll({ questionReady: true }, undefined, undefined);
 
   form.onsubmit = async (event) => {
     event.preventDefault();
     // formButton.disabled = true;
-
-    calID = await getCalId();
-
     const formData = getFormData();
 
-    apiStatePoll({ addEvents: true, formData, calID }, formButton);
+    apiStatePoll({ addEvents: true, formData, calID });
   };
 
   deleteCalButton.onclick = async () => {
-    calID = await getCalId();
-
     // deleteCalButton.disabled = true;
 
-    apiStatePoll({ delCal: true, calID }, deleteCalButton);
+    apiStatePoll({ delCal: true, calID });
   };
 };
