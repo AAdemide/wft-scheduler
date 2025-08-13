@@ -35,4 +35,25 @@ export const regexp = {
   userDetailsRegExp: /https:\/\/wft.homedepot.com\/missioncontrol\/v1\/user\/details*/,
 };
 
+export const AUTH_STATES = {
+  UNAUTHENTICATED: "unauthenticated",
+  AUTHENTICATING: "authenticating",
+  AUTH_FAILED: "auth_failed",
+  AUTH_SUCCESS: "auth_success",
+};
+
+export const THD_AUTH_STATES = {
+  IDLE: "idle",
+  AUTHENTICATING: "authenticating",
+  AUTH_FAILED: "auth_failed",
+  AUTH_SUCCESS: "auth_success",
+};
+
+export const API_STATES = {
+  FAILED: "failed",
+  SUCCESS: "success",
+  WAITING: "waiting",
+  IDLE: "idle",
+};
+
 export const filter = { urls: ["https://wft.homedepot.com/*"] };

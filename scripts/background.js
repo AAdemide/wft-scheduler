@@ -4,44 +4,76 @@ import * as utils from "../utils/utils.js";
 Object.assign(self, constants);
 Object.assign(self, utils);
 
-//BUG: oauth webpage opening twice if you do not give access to the web app. Test out bug theory by counting how many times the app is run and printing count to see if it is run after clear interval. Suddenly stopped test more to confirm absence
 let timer;
-
-//TODO: move to constants
-const AUTH_STATES = {
-  UNAUTHENTICATED: "unauthenticated",
-  AUTHENTICATING: "authenticating",
-  AUTH_FAILED: "auth_failed",
-  AUTH_SUCCESS: "auth_success",
-};
 let authState = AUTH_STATES.UNAUTHENTICATED;
-
-const THD_AUTH_STATES = {
-  IDLE: "idle",
-  AUTHENTICATING: "authenticating",
-  AUTH_FAILED: "auth_failed",
-  AUTH_SUCCESS: "auth_success",
-};
 let thdAuthState = THD_AUTH_STATES.IDLE;
-
-const API_STATES = {
-  FAILED: "failed", //failed validation or adding events
-  SUCCESS: "success", //failed validation or adding events
-  WAITING: "waiting", //waiting for validation or adding events
-  IDLE: "idle", //the initial state and the reset state
-};
-//apiStates: -1 if failed (validating or adding events); 0 if waiting (validating or adding events); 1 if validated successfully ;2 if added successfully; undefined as the initial state and the reset state
 let apiState = API_STATES.IDLE;
+// let swDisabled = false;
+let fetchedJsons = {};
+let globalInit = {
+  async: true,
+  contentType: "json",
+};
+let urls = {
+  summary: "",
+  details: "",
+  weekly: "",
+  userDetails: "",
 
+  summaryMatch: (url) => regexp.summaryRegExp.test(url),
+  detailsMatch: (url) => regexp.detailsRegExp.test(url),
+  weeklyMatch: (url) => regexp.weeklyRegExp.test(url),
+  userDetailsMatch: (url) => regexp.userDetailsRegExp.test(url),
+
+  async gottenAllUrls() {
+    const result =
+      this.summary !== "" &&
+      this.details !== "" &&
+      this.weekly !== "" &&
+      this.userDetails !== "";
+
+    if (result) {
+      // console.log("setting session storage", fetchedJsons);
+
+      chrome.storage.session.set({
+        urls: {
+          summary: this.summary,
+          details: this.details,
+          weekly: this.weekly,
+          userDetails: this.userDetails,
+        },
+      });
+    } else {
+      const myUrls = await chrome.storage.session.get("urls");
+      if (myUrls?.urls?.summary) {
+        this.summary = myUrls.urls.summary;
+        this.details = myUrls.urls.details;
+        this.weekly = myUrls.urls.weekly;
+        this.userDetails = myUrls.urls.userDetails;
+        return true;
+      }
+    }
+    return result;
+    // && !swDisabled;
+  },
+
+  clearAllUrls() {
+    this.summary = "";
+    this.details = "";
+    this.weekly = "";
+    this.userDetails = "";
+  },
+};
+
+// checks if workforce has been authenticated, if so get the user data
 async function fetchUserData() {
+  // since the background script is polled only run the function if the authentication has begun.
   if (thdAuthState != THD_AUTH_STATES.AUTHENTICATING) {
+    console.log(authState, thdAuthState, apiState);
     try {
-      // console.log(
-      //   `summary:${urls.summary}\ndetails: ${urls.details}\nweekly:${urls.weekly}\nuser details: ${urls.userDetails}`
-      // );
       if (await urls.gottenAllUrls()) {
         thdAuthState = THD_AUTH_STATES.AUTHENTICATING;
-        swDisabled = true;
+        // swDisabled = true;
         const results = await Promise.all([
           fetch(urls.summary),
           fetch(urls.details),
@@ -54,10 +86,10 @@ async function fetchUserData() {
             let res;
             if (r.status === 200) {
               res = await r.json();
-              console.log("json", res);
+              // console.log("json", res);
             } else {
               res = await r.text();
-              console.log("not json", res);
+              // console.log("not json", res);
             }
             return res;
           })
@@ -70,75 +102,23 @@ async function fetchUserData() {
         };
         thdAuthState = THD_AUTH_STATES.AUTH_SUCCESS;
         return true;
-      } else {
+      }
+      // The else block sets the authState to false when the user has simply not logged in to workforce.
+       else {
         thdAuthState = THD_AUTH_STATES.AUTH_FAILED;
         return false;
       }
     } catch (err) {
       thdAuthState = THD_AUTH_STATES.AUTH_FAILED;
       urls.clearAllUrls();
-      console.log(err);
+      console.warn(err);
     }
-    swDisabled = false;
+    // swDisabled = false;
     return false;
   }
 }
 
-let globalInit = {
-  async: true,
-  contentType: "json",
-};
-
-let swDisabled = false;
-let fetchedJsons = {};
-
-let urls = {
-  summary: "",
-  details: "",
-  weekly: "",
-  userDetails: "",
-  summaryMatch: (url) => regexp.summaryRegExp.test(url) && !swDisabled,
-  detailsMatch: (url) => regexp.detailsRegExp.test(url) && !swDisabled,
-  weeklyMatch: (url) => regexp.weeklyRegExp.test(url) && !swDisabled,
-  userDetailsMatch: (url) => regexp.userDetailsRegExp.test(url) && !swDisabled,
-  async gottenAllUrls() {
-    const myUrls = await chrome.storage.session.get("urls");
-    if (myUrls?.urls?.summary) {
-      this.summary = myUrls.urls.summary;
-      this.details = myUrls.urls.details;
-      this.weekly = myUrls.urls.weekly;
-      this.userDetails = myUrls.urls.userDetails;
-      return true;
-    }
-    const result =
-      this.summary !== "" &&
-      this.details !== "" &&
-      this.weekly !== "" &&
-      this.userDetails !== "";
-    if (result) {
-      console.log("setting session storage", fetchedJsons);
-
-      chrome.storage.session.set({
-        urls: {
-          summary: this.summary,
-          details: this.details,
-          weekly: this.weekly,
-          userDetails: this.userDetails,
-        },
-      });
-    }
-    return result && !swDisabled;
-  },
-  clearAllUrls() {
-    this.summary = "";
-    this.details = "";
-    this.weekly = "";
-    this.userDetails = "";
-  },
-};
-
 async function makeCalendar() {
-  // console.log(`${fetchedJsons.userDetails.firstName} ${fetchedJsons.userDetails.lastName}'s WFT Calendar`)
   let init = { ...globalInit };
   init.method = "POST";
   init.body = JSON.stringify({
@@ -160,6 +140,7 @@ async function makeCalendar() {
   chrome.storage.sync.set({ "WFT-Scheduler Calendar ID": calendarID });
   return calendarID;
 }
+
 async function deleteCalendar(calIds) {
   console.log("from delete calendar", apiState);
   apiState = API_STATES.WAITING;
@@ -234,12 +215,13 @@ async function addToCalendarList(reminder = constants.defaultReminder, calID) {
   }
 }
 
-async function addEventsToCalendar(events, formData, calID) {
+async function addEventsToCalendar(events, formData) {
   // if (!calID) {
   console.log("I'm supposed to add events and should be called once");
   apiState = API_STATES.WAITING;
+  let calID;
   try {
-    const calID = await makeCalendar();
+    calID = await makeCalendar();
     addToCalendarList(
       { method: formData.method, minutes: formData.minutes },
       calID
@@ -345,11 +327,11 @@ const onHeadersReceivedCallback = async (details) => {
 
   //BUG: error in console when wft logs out url start from identity.homedepot.com/idp [exact redirect url: https://identity.homedepot.com/idp/DRON2_2tHsN/resume/idp/startSLO.ping]
 
+  // has fetchedJsons been filled with data
   if (!fetchedJsons.userDetails?.firstName) {
     fetchUserData();
   }
 
-  // console.log(currUrl, "matches summaryURL:", urls.summaryMatch(currUrl), "swDisabled", swDisabled);
   if (urls.summaryMatch(currUrl)) urls.summary = currUrl;
   else if (urls.detailsMatch(currUrl)) urls.details = currUrl;
   else if (urls.weeklyMatch(currUrl)) urls.weekly = currUrl;
@@ -366,22 +348,24 @@ const onMessageCallback = (req, _, sendResponse) => {
         deleteCalendar([req.calID]);
       },
     };
+
+    // first thing's first check if google api has been authenticated
     if (
       authState == AUTH_STATES.UNAUTHENTICATED ||
       authState == AUTH_STATES.AUTH_FAILED
     ) {
       console.log(authState, timer);
       if (!timer?.tokenValid()) authenticate();
+      sendResponse({ready: false})
     } else if (timer?.tokenValid() && authState == AUTH_STATES.AUTH_SUCCESS) {
       try {
-        console.log(apiState);
         // console.log(event);
+        console.log(authState, thdAuthState, apiState);
         if (thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS || event == "delCal") {
           if (apiState == API_STATES.IDLE) {
+            console.log("apiState is idle so event will be called");
             actions[event]();
-            console.log("what is going on ");
           } else if (apiState == API_STATES.SUCCESS) {
-            console.log("what is going on ");
             console.log(thdAuthState);
             if (thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS) {
               if (event == "addEvents") {
@@ -392,6 +376,7 @@ const onMessageCallback = (req, _, sendResponse) => {
                 apiState = API_STATES.IDLE;
               }
             } else {
+              console.log(authState, thdAuthState, apiState);
               sendResponse({ nextPage: "instructions", apiState: apiState });
               apiState = API_STATES.IDLE;
             }
@@ -403,6 +388,9 @@ const onMessageCallback = (req, _, sendResponse) => {
       } catch (error) {
         console.error(error);
       }
+    } else if (authState == AUTH_STATES.AUTHENTICATING) {
+      console.log(authState);
+      sendResponse({nextPage: "loading"})
     }
 
     // else {
@@ -411,44 +399,40 @@ const onMessageCallback = (req, _, sendResponse) => {
   };
   const handlers = {
     questionReady: () => {
+      // checks if workforce has been logged into by calling fetchUserData (which also fetches the user data)
       fetchUserData();
-      if (
-        authState == AUTH_STATES.UNAUTHENTICATED ||
-        authState == AUTH_STATES.AUTH_FAILED
-      ) {
-        console.log(authState, timer);
-        if (!timer?.tokenValid()) authenticate();
-      }
+
+      // depending on the state of thdAuthState change the page
       if (thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS) {
-        sendResponse({ ready: true, nextPage: "form" });
+        sendResponse({ wftAuthenticated: true, nextPage: "form" });
       } else if (thdAuthState == THD_AUTH_STATES.AUTHENTICATING) {
-        // console.log("else if block");
         sendResponse({ nextPage: "loading" });
       } else if (thdAuthState == THD_AUTH_STATES.AUTH_FAILED) {
-        // console.log(apiState, thdAuthState);
         sendResponse({ nextPage: "instructions" });
       }
-      // else {
-      //   // console.log("else block", apiState, thdAuthState, authState);
-      //   sendResponse({ nextPage: "loading" });
-      // }
+      else {
+        // console.log(authState, thdAuthState, apiState);
+        sendResponse({ nextPage: "loading" });
+      }
     },
-    makeIdle: () => {
-      apiState = API_STATES.IDLE;
-    },
+    makeIdle: () => apiState = API_STATES.IDLE,
     addEvents: () => genericHandler("addEvents"),
     delCal: () => genericHandler("delCal"),
   };
 
+  // handlers called by popup.js
   const reqKeys = Object.keys(req);
+
+  // if there are valid handler functions call them and return the function
   reqKeys.forEach((reqKey) => {
     if (handlers[reqKey]) {
       handlers[reqKey]();
       return true;
     }
   });
-
-  sendResponse({ ready: false, nextPage: "instructions" });
+  // if no handlers were called return ready false
+  // sendResponse({ ready: false, nextPage: "instructions" });
+  return true;
 };
 
 chrome.webRequest.onHeadersReceived.addListener(

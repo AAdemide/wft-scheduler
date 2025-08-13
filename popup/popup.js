@@ -71,20 +71,13 @@ function changePage(page) {
 }
 
 function apiStatePoll(message, timeout = 5000) {
-  const startTime = Date.now();
   const poller = setInterval(() => {
     chrome.runtime.sendMessage(message, (res) => {
-      // console.log(
-      //   "polling with message:",
-      //   message,
-      //   "\n",
-      //   "response received in popup.js",
-      //   res
-      // );
-      const { apiState, nextPage, ready } = res ?? {};
-      // temporary ? solution
+
+      // console.log(message, res)
+
+      const { apiState, nextPage, ready,wftAuthenticated } = res ?? {};
       if (apiState === "failed") {
-        // button.disabled = false;
         clearInterval(poller);
         changePage(Pages.FAILED);
       } else if (ready) {
@@ -96,18 +89,12 @@ function apiStatePoll(message, timeout = 5000) {
       }
       // changes to the page requested by the background script
       else if (nextPage) {
-        // button.disabled = false;
         if (nextPage != "loading") {
           // console.log("polling should stop");
           clearInterval(poller);
         }
         changePage(nextPage);
       }
-      // else if (Date.now() - startTime > timeout) {
-      //   console.log("Timeout reached, stopping poll");
-      //   // button.disabled = false;
-      //   clearInterval(poller);
-      // }
       else if (apiState === "waiting") {
         changePage(Pages.LOADING);
       }
@@ -117,19 +104,21 @@ function apiStatePoll(message, timeout = 5000) {
 
 window.onload = async function () {
   calID = await getCalId();
-  apiStatePoll({ questionReady: true }, undefined, undefined);
+  // questionReady is to check whether thdAuthState [ workforce has been logged into]
+  console.log("first")
+  if(calID) {
+    changePage(Pages.CALENDAR);
+  } else {
+    apiStatePoll({ questionReady: true }, undefined, undefined);
+  }
 
   form.onsubmit = async (event) => {
     event.preventDefault();
-    // formButton.disabled = true;
     const formData = getFormData();
-
     apiStatePoll({ addEvents: true, formData, calID });
   };
 
   deleteCalButton.onclick = async () => {
-    // deleteCalButton.disabled = true;
-
     apiStatePoll({ delCal: true, calID });
   };
 };
