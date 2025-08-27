@@ -1,72 +1,5 @@
 import * as constants from "../utils/constants.js";
 
-// parseDays returns {
-//   start: { dateTime: "2025-02-09T14:30:00", timeZone: "America/Toronto" },
-//   end: { dateTime: "2025-02-09T20:00:00", timeZone: "America/Toronto" },
-//   summary: "Lunch, Lunch, Lunch Associate",
-//   description:
-//     "Lunch Associate from Invalid Date to Invalid DateLunch Associate from Invalid Date to Invalid DateLunch Associate from Invalid Date to Invalid Date",
-//   location: "Rexdale",
-// };
-
-// single day object passed to parseDays
-// 2025-02-09T00:00:00Z: {
-//   "start": "2025-02-09T14:30:00Z",
-//   "end": "2025-02-09T20:00:00Z",
-//   "duration": 330,
-//   "payableDuration": 300,
-//   "shifts": {
-//       "1283533073": {
-//           "shiftId": "1283533073",
-//           "start": "2025-02-09T14:30:00Z",
-//           "end": "2025-02-09T20:00:00Z",
-//           "duration": 330,
-//           "payableDuration": 300,
-//           "segments": [
-//               {
-//                   "shiftId": "1174128094",
-//                   "start": "2025-02-09T14:30:00Z",
-//                   "end": "2025-02-09T18:00:00Z",
-//                   "duration": 210,
-//                   "payableDuration": 210,
-//                   "department": "Home Depot/CAN/Magasin-Stores/Canada/Est-East/District 0350/7114 - Store/030 - Millwork/Associate",
-//                   "details": "REGULAR_SEGMENT",
-//                   "type": "regular",
-//                   "published": true,
-//                   "location": "Home Depot/CAN/Magasin-Stores/Canada/Est-East/District 0350/7114 - Store/030 - Millwork/Associate",
-//                   "payable": true
-//               },
-//               {
-//                   "shiftId": "1174128095",
-//                   "start": "2025-02-09T18:00:00Z",
-//                   "end": "2025-02-09T18:30:00Z",
-//                   "duration": 30,
-//                   "payableDuration": 0,
-//                   "details": "BREAK_SEGMENT",
-//                   "type": "break",
-//                   "published": true,
-//                   "location": "",
-//                   "payable": false
-//               },
-//               {
-//                   "shiftId": "1174128096",
-//                   "start": "2025-02-09T18:30:00Z",
-//                   "end": "2025-02-09T20:00:00Z",
-//                   "duration": 90,
-//                   "payableDuration": 90,
-//                   "department": "Home Depot/CAN/Magasin-Stores/Canada/Est-East/District 0350/7114 - Store/030 - Millwork/Associate",
-//                   "details": "REGULAR_SEGMENT",
-//                   "type": "regular",
-//                   "published": true,
-//                   "location": "Home Depot/CAN/Magasin-Stores/Canada/Est-East/District 0350/7114 - Store/030 - Millwork/Associate",
-//                   "payable": true
-//               }
-//           ],
-//           "published": true
-//       }
-//   }
-// }
-
 export class TokenTimer {
   constructor(stopTime) {
     this.currentTime = 0;
@@ -126,7 +59,7 @@ export const parseDays = (days) => {
       let to = new Date(segment.end.slice(0, -1)).toLocaleTimeString("en-US", {
         timeStyle: "short",
       });
-      event.summary +=( ((department==="Lunch") ||(department==event.summary)) ? "" : `${
+      event.summary += ( ((department==="Lunch") ||(department==event.summary)) ? "" : `${
         event.summary.length == 0 ? department : ", " + department
       }`);
       event.description += `${department + (department=== "Lunch" ? "" : " Associate")} from ${from} to ${to} `;

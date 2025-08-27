@@ -5,7 +5,7 @@
 
 body,
 html {
-  height: 250px;
+  height: 300px;
   width: 250px;
   background-color: #1a1a1a;
   color: white;
@@ -15,6 +15,10 @@ html {
 a {
   color: #ff3d00;
 }
+
+h1 {
+  font-size: 1.65rem;
+}
 h3 {
   font-size: 1.025rem;
 }
@@ -23,10 +27,10 @@ input,
 select {
   font-size: 0.95rem;
   display: block;
-  margin-top: 0.35rem;
+  /* margin-top: 0.35rem; */
 }
 
-button {
+.cta-button {
   background-color: transparent;
   border: 2px solid white;
   color: #ff3d00;
@@ -44,14 +48,14 @@ button {
   transition: all 0.5s ease-in-out;
   user-select: none;
 }
-button:enabled:hover {
+.cta-button:enabled:hover {
   background-color: white;
   box-shadow: 0 0 7px 2px rgba(255, 255, 255, 0.7);
 }
-button:disabled {
+.cta-button:disabled {
   border: none;
 }
-button:disabled:after {
+.cta-button:disabled:after {
   content: "";
   position: absolute;
   width: 100%;
@@ -75,28 +79,159 @@ button:disabled > img::before {
   height: 1.15rem;
 }
 
-#instruction-page {
+.page {
   height: 100%;
   width: 100%;
   display: flex;
   justify-content: center;
-  text-align: center;
+  /* text-align: center; */
   flex-direction: column;
+  align-items: center;
+}
+
+.button {
+  display: inline-block;
+  padding: .75rem 0;
+  background-color: transparent;
+  border-radius: .5rem;
+}
+
+.button:enabled:hover {
+  cursor: pointer;
+}
+
+.button:disabled  {
+  border: 2px solid gray !important;
+  color: gray !important;
+}
+
+.button:disabled:hover {
+  cursor: not-allowed;
+}
+
+.success-confirmation {
+  color: green;
+}
+
+.failed-confirmation {
+  color: maroon;
+}
+
+.neutral-text {
+  color: rgb(214, 212, 212);
+}
+
+#delete-calendar {
+  border: 2px solid red;
+  color: red;
+  /* width: 40%; */
+}
+#delete-calendar:hover {
+  background-color: red;
+  color: white;
+}
+
+#update-calendar {
+  border: 2px solid #008CBA;
+  color: #008CBA;
+} 
+
+#update-calendar:enabled:hover {
+  background-color: #008CBA;
+  color: white;
+}
+
+#button-group {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  justify-content: space-around;
+  gap: .75rem 0;
+}
+
+#button-group > p {
+  text-align: center;
+}
+
+#share-input-group {
+  border-radius: .5rem;
+  overflow: clip;
+  border: 2px solid white;
+  height: 2.5rem;
+}
+
+#share-to-gmail {
+  border: none;
+  outline: none;
+  background-color: transparent;
+  color: white;
+  height: 100%;
+  margin-left: .5rem;
+}
+
+#share-button {
+  background-color: transparent;
+  border: none;
+  border-left: 2px solid white;
+  height: 100%;
+  width: 100%;
+  cursor: pointer;
+}
+
+#share-button:hover {
+  background-color: white;
+}
+
+#share-button > svg {
+  width: 100%;
+  height: auto;
+  fill: white;
+  transition: all 0.1s ease-in-out;
+  vertical-align: middle;
+}
+
+#share-button:hover > svg {
+  fill: #1a1a1a;
+}
+
+#share-cal-success, #share-cal-failed {
+  margin-top: .5rem;
+}
+
+
+#instruction-page {
   padding: 1rem;
 }
 
 #calendar-made-page {
-  width: 100%;
-  height: 100%;
+  padding: 1rem;
+  justify-content: center;
+  gap: 1rem;
+}
+
+#refresh-time-elapsed-container {
+  margin: -0.5rem 0;
+  width: 75%;
+}
+
+#add-user {
+  display: flex;
+  text-align: start;
+  justify-content: flex-start;
+  flex-direction: column;
+}
+
+#add-user > div {
+  display: flex;
+}
+
+#add-user > label {
+  font-size: 1.15rem;
+  margin-bottom: 1rem;
 }
 
 #form-page {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
-  gap: .75rem;
+  gap: 0.75rem;
   padding: 0.5rem;
 
   label {
@@ -111,11 +246,6 @@ button:disabled > img::before {
 }
 
 #loader-page {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
 }
 
 .loader {

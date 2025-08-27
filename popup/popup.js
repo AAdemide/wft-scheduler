@@ -1,6 +1,6 @@
 const wftURL = /https:\/\/wft.homedepot.com\/*/;
 
-const home = window.document.querySelector("#instruction-page");
+const home = document.querySelector("#instruction-page");
 const calendarMade = document.querySelector("#calendar-made-page");
 const deleteCalButton = document.querySelector("#delete-calendar");
 const loading = document.querySelector("#loader-page");
@@ -33,8 +33,6 @@ async function getCalId() {
 }
 
 function changePage(page) {
-  // console.log("changed to page", page);
-
   if (page == Pages.CALENDAR) {
     calendarMade.classList.remove("hidden");
     form.classList.add("hidden");
@@ -73,11 +71,39 @@ function changePage(page) {
 function apiStatePoll(message, timeout = 5000) {
   const poller = setInterval(() => {
     chrome.runtime.sendMessage(message, (res) => {
+      const {
+        apiState,
+        nextPage,
+        ready,
+        wftAuthenticated,
+        shareButtonHandled,
+      } = res ?? {};
+      if (shareButtonHandled) {
+        const shareButton = document.querySelector("#share-button");
+        if (shareButtonHandled == "success") {
+          shareButton.disabled = false;
+          const shareCalSuccess = document.querySelector("#share-cal-success");
 
-      // console.log(message, res)
+          shareCalSuccess.classList.toggle("hidden");
+          setTimeout(() => {
+            shareCalSuccess.classList.toggle("hidden");
+          }, 5000);
+          clearInterval(poller);
+        } else if (shareButtonHandled == "failed") {
+          // failed displayed
+          shareButton.disabled = false;
+          const shareCalFailed = document.querySelector("#share-cal-failed");
 
-      const { apiState, nextPage, ready,wftAuthenticated } = res ?? {};
-      if (apiState === "failed") {
+          shareCalFailed.classList.toggle("hidden");
+          setTimeout(() => {
+            shareCalFailed.classList.toggle("hidden");
+          }, 5000);
+          clearInterval(poller);
+        } else {
+          //button disabled
+          shareButton.disabled = true;
+        }
+      } else if (apiState === "failed") {
         clearInterval(poller);
         changePage(Pages.FAILED);
       } else if (ready) {
@@ -89,13 +115,13 @@ function apiStatePoll(message, timeout = 5000) {
       }
       // changes to the page requested by the background script
       else if (nextPage) {
+        // console.log(nextPage);
         if (nextPage != "loading") {
           // console.log("polling should stop");
           clearInterval(poller);
         }
         changePage(nextPage);
-      }
-      else if (apiState === "waiting") {
+      } else if (apiState === "waiting") {
         changePage(Pages.LOADING);
       }
     });
@@ -103,11 +129,34 @@ function apiStatePoll(message, timeout = 5000) {
 }
 
 window.onload = async function () {
+  const refreshTimeElapsed = document.querySelector("#refresh-time-elapsed");
+  const addUserForm = document.querySelector("#add-user");
+  const updateButton = document.querySelector("#update-calendar");
+
+  const res = await chrome.storage.sync.get("refreshTimeElapsed");
+  const pastTime = moment(res.refreshTimeElapsed);
+  const duration = moment.duration(moment().diff(pastTime));
+  refreshTimeElapsed.innerText = duration.humanize();
   calID = await getCalId();
   // questionReady is to check whether thdAuthState [ workforce has been logged into]
-  console.log("first")
-  if(calID) {
+  if (calID) {
     changePage(Pages.CALENDAR);
+    addUserForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      apiStatePoll(
+        {
+          shareButtonClicked: {
+            calID,
+            email: "ademideakinsefunmi@gmail.com",
+          },
+        });
+    });
+
+    updateButton.addEventListener("click", () => {
+      apiStatePoll({
+        updateButtonClicked: calID
+      });
+    })
   } else {
     apiStatePoll({ questionReady: true }, undefined, undefined);
   }
