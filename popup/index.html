@@ -6,22 +6,25 @@
     <link rel="stylesheet" href="style.css" />
     <script src="../utils/moment.js"></script>
     <title>wft-scheduler</title>
-</script>
   </head>
   <body>
     <div id="instruction-page" class="hidden page">
-      <h3>
-        Please log in at
+      <div id="cursor-orb"></div> <!-- glowing orb -->
+      <h1>Please log in</h1>
+      <p>
+        Go to
         <a href="https://wft.homedepot.com" target="_blank"
           >wft.homedepot.com</a
         >
-        then refresh the page
-      </h3>
+        and log in, then refresh this page
+      </p>
     </div>
 
     <form id="form-page" class="hidden page">
-      <h3>Refresh for latest schedule</h3>
-      <p id="refresh-time-elapsed-container" class="neutral-text">Last refreshed: <span id="refresh-time-elapsed"></span></p>
+      <h1>Refresh for your latest schedule</h1>
+      <p id="refresh-time-elapsed-container" class="neutral-text">
+        Last refreshed: <span id="refresh-time-elapsed"></span>
+      </p>
       <div class="form__inner">
         <label>
           Receive notifications via
@@ -63,22 +66,54 @@
       <h1>Calendar Created</h1>
       <div id="button-group">
         <button id="delete-calendar" class="button">Delete</button>
-        <button id="update-calendar" class="button" title="login to wft and refresh for most recent data" disabled>Update</button>
-        <p id="calendar-updated" class="success-confirmation hidden">Calendar has been updated</p>
-        <p id="calendar-up-to-date" class="neutral-text hidden">Calendar is already up to date</p>
+        <button
+          id="update-calendar"
+          class="button"
+          title="login to wft and refresh for most recent data"
+          disabled
+        >
+          Update
+        </button>
+        <p id="calendar-updated" class="success-confirmation hidden">
+          Calendar has been updated
+        </p>
+        <p id="calendar-up-to-date" class="neutral-text hidden">
+          Calendar is already up to date
+        </p>
       </div>
 
       <form id="add-user">
-    
-        <label for="share-to-gmail">
-          Share My Calendar
-        </label>
+        <label for="share-to-gmail"> Share My Calendar </label>
         <div id="share-input-group">
-          <input id="share-to-gmail" type="email" placeholder="Enter user's gmail" required>
-          <button id="share-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><path d="M568.4 37.7C578.2 34.2 589 36.7 596.4 44C603.8 51.3 606.2 62.2 602.7 72L424.7 568.9C419.7 582.8 406.6 592 391.9 592C377.7 592 364.9 583.4 359.6 570.3L295.4 412.3C290.9 401.3 292.9 388.7 300.6 379.7L395.1 267.3C400.2 261.2 399.8 252.3 394.2 246.7C388.6 241.1 379.6 240.7 373.6 245.8L261.2 340.1C252.1 347.7 239.6 349.7 228.6 345.3L70.1 280.8C57 275.5 48.4 262.7 48.4 248.5C48.4 233.8 57.6 220.7 71.5 215.7L568.4 37.7z"/></svg></button>
+          <input
+            id="share-to-gmail"
+            type="email"
+            placeholder="Enter user's gmail"
+            required
+          />
+
+          <button id="share-button" disabled>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 640 640"
+              disabled
+            >
+              <path
+                d="M568.4 37.7C578.2 34.2 589 36.7 596.4 44C603.8 51.3 606.2 62.2 602.7 72L424.7 568.9C419.7 582.8 406.6 592 391.9 592C377.7 592 364.9 583.4 359.6 570.3L295.4 412.3C290.9 401.3 292.9 388.7 300.6 379.7L395.1 267.3C400.2 261.2 399.8 252.3 394.2 246.7C388.6 241.1 379.6 240.7 373.6 245.8L261.2 340.1C252.1 347.7 239.6 349.7 228.6 345.3L70.1 280.8C57 275.5 48.4 262.7 48.4 248.5C48.4 233.8 57.6 220.7 71.5 215.7L568.4 37.7z"
+              />
+            </svg>
+          </button>
         </div>
-        <p id="share-cal-success" class="hidden success-confirmation">Successfully added user to calendar, ask them to check their email</p>
-        <p id="share-cal-failed" class="hidden failed-confirmation">Failed to add user to calendar</p>
+        <p id="share-cal-success" class="hidden success-confirmation">
+          Successfully added user to calendar, ask them to check their email
+        </p>
+        <p id="share-cal-failed" class="hidden failed-confirmation">
+          Failed to add user to calendar
+        </p>
+
+        <p id="email-error" class="failed-confirmation hidden">
+          Please enter a gmail or googlemail address
+        </p>
       </form>
     </div>
 
@@ -87,7 +122,8 @@
     </div>
 
     <div id="failed-page" class="hidden page">
-      I have failed sorry. Please try again, I don't know what went wrong so try everything again.
+      I have failed sorry. Please try again, I don't know what went wrong so try
+      everything again.
     </div>
 
     <script src="popup.js" type="module"></script>

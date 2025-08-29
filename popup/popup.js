@@ -8,6 +8,7 @@ const form = document.querySelector("#form-page");
 const failedPage = document.querySelector("#failed-page");
 const formButton = form.querySelector("#form-submit");
 let calID = {};
+let port;
 const interval = 100;
 let countInterval;
 const maxInterval = 100;
@@ -17,6 +18,23 @@ const Pages = {
   INSTRUCTIONS: "instructions",
   LOADING: "loading",
   FAILED: "failed",
+};
+
+let currentPage = Pages.LOADING;
+
+const pageElements = {
+  home: document.querySelector("#instruction-page"),
+  calendarMade: document.querySelector("#calendar-made-page"),
+  deleteCalButton: document.querySelector("#delete-calendar"),
+  loading: document.querySelector("#loader-page"),
+  form: document.querySelector("#form-page"),
+  failedPage: document.querySelector("#failed-page"),
+  formButton: form.querySelector("#form-submit"),
+  refreshTimeElapsed: document.querySelector("#refresh-time-elapsed"),
+  addUserForm: document.querySelector("#add-user"),
+  updateButton: document.querySelector("#update-calendar"),
+  shareButton: document.querySelector("#share-button"),
+  shareInput: document.querySelector("#share-to-gmail"),
 };
 
 function getFormData() {
@@ -33,6 +51,8 @@ async function getCalId() {
 }
 
 function changePage(page) {
+  currentPage = page;
+  pageElements.updateButton.disabled = true;
   if (page == Pages.CALENDAR) {
     calendarMade.classList.remove("hidden");
     form.classList.add("hidden");
@@ -52,7 +72,8 @@ function changePage(page) {
     loading.classList.add("hidden");
     failedPage.classList.add("hidden");
 
-    apiStatePoll({ makeIdle: true, questionReady: true });
+    // sendMessage({ makeIdle: true, questionReady: true });
+    // sendMessage({ makeIdle: true });
   } else if (page == Pages.LOADING) {
     form.classList.add("hidden");
     calendarMade.classList.add("hidden");
@@ -128,46 +149,124 @@ function apiStatePoll(message, timeout = 5000) {
   }, interval);
 }
 
-window.onload = async function () {
+async function setRefreshTimeElapsed() {
   const refreshTimeElapsed = document.querySelector("#refresh-time-elapsed");
-  const addUserForm = document.querySelector("#add-user");
-  const updateButton = document.querySelector("#update-calendar");
-
   const res = await chrome.storage.sync.get("refreshTimeElapsed");
   const pastTime = moment(res.refreshTimeElapsed);
   const duration = moment.duration(moment().diff(pastTime));
   refreshTimeElapsed.innerText = duration.humanize();
-  calID = await getCalId();
+}
+
+function sendMessage(message) {
+  port.postMessage(message);
+}
+
+function handleMessage(message, sender) {
+  console.log(message, sender);
+  const { fetchedJsons, nextPage, updateRefresh } = message;
+
+  // if fetchedJsons == true, check the current page and make the right decision
+  if (fetchedJsons == "success" && !calID) {
+    console.log(1);
+    changePage(Pages.FORM);
+  } else if (fetchedJsons == "success" && calID) {
+    console.log(2);
+    pageElements.updateButton.disabled = false;
+  } else if (fetchedJsons == "pending" && !calID) {
+    changePage(Pages.LOADING);
+  } else if (fetchedJsons == "failed" && !calID) {
+    changePage(Pages.INSTRUCTIONS);
+  }
+  else if (updateRefresh) {
+    setRefreshTimeElapsed();
+  }
+  if (nextPage) {
+    changePage(nextPage);
+  }
+}
+
+function eventListenerSetup() {
+  const addUserForm = document.querySelector("#add-user");
+  const updateButton = document.querySelector("#update-calendar");
+  const errorMsg = document.querySelector("#email-error");
+  // Regex to validate gmail/googlemail
+  const emailRegex = /^[a-zA-Z0-9._%+~-]+@(gmail\.com|googlemail\.com)$/;
+  const orb = document.getElementById("cursor-orb");
+  const instructionPage = document.getElementById("instruction-page");
+
+  if (orb && instructionPage) {
+    instructionPage.addEventListener(
+      "mousemove",
+      (e) => {
+        const rect = instructionPage.getBoundingClientRect();
+        const x = e.clientX - 100;
+        const y = e.clientY - 150;
+        orb.style.transform = `translate(${x}px, ${y}px)`;
+      },
+      { passive: true }
+    );
+  }
+
   // questionReady is to check whether thdAuthState [ workforce has been logged into]
   if (calID) {
+    console.log("calendar exists");
     changePage(Pages.CALENDAR);
     addUserForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      apiStatePoll(
-        {
-          shareButtonClicked: {
-            calID,
-            email: "ademideakinsefunmi@gmail.com",
-          },
-        });
+      sendMessage({
+        shareButtonClicked: {
+          calID,
+          email: "ademideakinsefunmi@gmail.com",
+        },
+      });
     });
 
     updateButton.addEventListener("click", () => {
-      apiStatePoll({
-        updateButtonClicked: calID
+      sendMessage({
+        updateButtonClicked: calID,
       });
-    })
-  } else {
-    apiStatePoll({ questionReady: true }, undefined, undefined);
+    });
   }
 
-  form.onsubmit = async (event) => {
+  pageElements.shareInput.addEventListener("input", function () {
+    const value = input.value.trim();
+
+    if (value === "" || emailRegex.test(value)) {
+      // Hide error if input is empty or valid
+      errorMsg.classList.add("hidden");
+
+      if (emailRegex.test(value)) {
+        pageElements.shareButton.disabled = false;
+      }
+    } else {
+      // Show error if input is invalid
+      errorMsg.classList.remove("hidden");
+    }
+  });
+  form.addEventListener("submit", (event) => {
     event.preventDefault();
     const formData = getFormData();
-    apiStatePoll({ addEvents: true, formData, calID });
-  };
+    sendMessage({ addEvents: true, formData, calID });
+  });
 
-  deleteCalButton.onclick = async () => {
-    apiStatePoll({ delCal: true, calID });
-  };
+  deleteCalButton.addEventListener("click", () => {
+    sendMessage({ delCal: true, calID });
+  });
+
+  //change to form submit
+  pageElements.shareButton.addEventListener("click", () => {
+    console.log("share button clicked");
+  });
+}
+
+window.onload = async function () {
+  calID = await getCalId();
+  setRefreshTimeElapsed();
+
+  chrome.runtime.sendMessage({ type: "wake-up" }, (response) => {
+    port = chrome.runtime.connect({ name: "wftSchedulerEventLoop" });
+    port.onMessage.addListener(handleMessage);
+  });
+
+  eventListenerSetup();
 };

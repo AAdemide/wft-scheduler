@@ -57,3 +57,11 @@ export const API_STATES = {
 };
 
 export const filter = { urls: ["https://wft.homedepot.com/*"] };
+
+export const Pages = {
+  FORM: "form",
+  CALENDAR: "calendar",
+  INSTRUCTIONS: "instructions",
+  LOADING: "loading",
+  FAILED: "failed",
+};
