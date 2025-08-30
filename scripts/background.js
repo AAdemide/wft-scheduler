@@ -286,16 +286,15 @@ async function addEventsToCalendar(events, formData) {
 
 function shareCalendar(email, calID) {
   // set apiState so that share calendar disables the share button when in waiting/loading state then shows the appropriate message for failure and success
-  console.log("here");
   apiState = API_STATES.WAITING;
-  sendMessage({ nextPage: Pages.LOADING });
+  sendMessage({ shareButtonHandled: API_STATES.WAITING });
   let init = { ...globalInit };
   console.log("shareCalendar called", init, authState, email, calID);
   init.method = "POST";
   const body = JSON.stringify({
     scope: {
       type: "user",
-      value: "ademideakinsefunmi@gmail.com",
+      value: email,
     },
     role: "reader",
   });
@@ -306,7 +305,7 @@ function shareCalendar(email, calID) {
     .then(async (res) => {
       if (res.ok) {
         apiState = constants.API_STATES.SUCCESS;
-        sendMessage({ shareButtonHandled: true });
+        sendMessage({ shareButtonHandled: API_STATES.SUCCESS });
         return res.json();
       }
       return res.text().then((text) => {
@@ -319,7 +318,7 @@ function shareCalendar(email, calID) {
     })
     .catch((err) => {
       apiState = API_STATES.FAILED;
-      sendMessage({ shareButtonHandled: false });
+      sendMessage({ shareButtonHandled: API_STATES.FAILED });
       console.warn(err);
     });
 }

@@ -110,11 +110,11 @@ button:disabled > img::before {
 }
 
 .success-confirmation {
-  color: green;
+  color: rgb(3, 255, 3);
 }
 
 .failed-confirmation {
-  color: maroon;
+  color: rgb(255, 87, 87);
 }
 
 .neutral-text {
@@ -160,6 +160,10 @@ button:disabled > img::before {
   height: 2.5rem;
 }
 
+#share-input-group:has( > #share-button:disabled) {
+  border-color: gray;
+}
+
 #share-to-gmail {
   border: none;
   outline: none;
@@ -198,6 +202,7 @@ button:disabled > img::before {
 #share-button:disabled {
   cursor: not-allowed;
   background-color: gray;
+  border-color: gray;
 }
 
 #share-button:disabled > svg > path{

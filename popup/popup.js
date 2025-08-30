@@ -1,3 +1,5 @@
+// import { API_STATES } from "../utils/constants";
+
 const wftURL = /https:\/\/wft.homedepot.com\/*/;
 
 const home = document.querySelector("#instruction-page");
@@ -35,6 +37,9 @@ const pageElements = {
   updateButton: document.querySelector("#update-calendar"),
   shareButton: document.querySelector("#share-button"),
   shareInput: document.querySelector("#share-to-gmail"),
+  addUserForm: document.querySelector("#add-user"),
+  shareCalSuccess: document.querySelector("#share-cal-success"),
+  shareCalFailed: document.querySelector("#share-cal-failed"),
 };
 
 function getFormData() {
@@ -99,7 +104,7 @@ function apiStatePoll(message, timeout = 5000) {
         wftAuthenticated,
         shareButtonHandled,
       } = res ?? {};
-      if (shareButtonHandled) {
+      if (shareButtonHandled == API_STATES.SUCCESS) {
         const shareButton = document.querySelector("#share-button");
         if (shareButtonHandled == "success") {
           shareButton.disabled = false;
@@ -157,28 +162,36 @@ async function setRefreshTimeElapsed() {
   refreshTimeElapsed.innerText = duration.humanize();
 }
 
+// if connection is dead ping service worker then send message
 function sendMessage(message) {
   port.postMessage(message);
 }
 
 function handleMessage(message, sender) {
   console.log(message, sender);
-  const { fetchedJsons, nextPage, updateRefresh } = message;
+  const { fetchedJsons, nextPage, updateRefresh, shareButtonHandled } = message;
 
   // if fetchedJsons == true, check the current page and make the right decision
   if (fetchedJsons == "success" && !calID) {
-    console.log(1);
     changePage(Pages.FORM);
   } else if (fetchedJsons == "success" && calID) {
-    console.log(2);
     pageElements.updateButton.disabled = false;
   } else if (fetchedJsons == "pending" && !calID) {
     changePage(Pages.LOADING);
   } else if (fetchedJsons == "failed" && !calID) {
     changePage(Pages.INSTRUCTIONS);
-  }
-  else if (updateRefresh) {
+  } else if (updateRefresh) {
     setRefreshTimeElapsed();
+  } else if (shareButtonHandled == "success") {
+    pageElements.shareCalSuccess.classList.toggle("hidden");
+    setTimeout(() => {
+      pageElements.shareCalSuccess.classList.toggle("hidden");
+    }, 5000);
+  } else if (shareButtonHandled == "failed") {
+    pageElements.shareCalFailed.classList.toggle("hidden");
+    setTimeout(() => {
+      pageElements.shareCalFailed.classList.toggle("hidden");
+    }, 5000);
   }
   if (nextPage) {
     changePage(nextPage);
@@ -209,16 +222,17 @@ function eventListenerSetup() {
 
   // questionReady is to check whether thdAuthState [ workforce has been logged into]
   if (calID) {
-    console.log("calendar exists");
     changePage(Pages.CALENDAR);
     addUserForm.addEventListener("submit", (event) => {
       event.preventDefault();
       sendMessage({
         shareButtonClicked: {
           calID,
-          email: "ademideakinsefunmi@gmail.com",
+          email: event.target[0].value,
         },
       });
+      event.target[0].value = "";
+      event.target[1].disabled = true;
     });
 
     updateButton.addEventListener("click", () => {
@@ -229,19 +243,17 @@ function eventListenerSetup() {
   }
 
   pageElements.shareInput.addEventListener("input", function () {
-    const value = input.value.trim();
+    const value = pageElements.shareInput.value.trim();
 
-    if (value === "" || emailRegex.test(value)) {
-      // Hide error if input is empty or valid
+    const isValidEmail = emailRegex.test(value);
+
+    if (value === "" || isValidEmail) {
       errorMsg.classList.add("hidden");
-
-      if (emailRegex.test(value)) {
-        pageElements.shareButton.disabled = false;
-      }
     } else {
-      // Show error if input is invalid
       errorMsg.classList.remove("hidden");
     }
+
+    pageElements.shareButton.disabled = !isValidEmail;
   });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -251,11 +263,6 @@ function eventListenerSetup() {
 
   deleteCalButton.addEventListener("click", () => {
     sendMessage({ delCal: true, calID });
-  });
-
-  //change to form submit
-  pageElements.shareButton.addEventListener("click", () => {
-    console.log("share button clicked");
   });
 }
 
