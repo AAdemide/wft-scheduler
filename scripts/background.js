@@ -6,8 +6,8 @@ Object.assign(self, utils);
 
 let port;
 let timer;
-let authState = AUTH_STATES.UNAUTHENTICATED;
 let thdAuthState = THD_AUTH_STATES.IDLE;
+let authState = AUTH_STATES.UNAUTHENTICATED;
 let apiState = API_STATES.IDLE;
 // let swDisabled = false;
 let fetchedJsons = {};
@@ -54,71 +54,88 @@ let urls = {
 };
 
 let lastReceivedHeaderTimer;
+
+function userDataFetched() {
+  return fetchedJsons.userDetails?.firstName;
+}
+
+function updateAuthState(state, message) {
+  thdAuthState = state;
+  sendMessage(message);
+}
+
+async function fetchAllJson() {
+  console.log(urls.details, urls.userDetails);
+  const results = await Promise.all([
+    fetch(urls.details),
+    fetch(urls.userDetails),
+  ]);
+
+  return Promise.all(
+    results.map(async (res, idx) => {
+      if (res.ok) {
+        return res.json();
+      } else {
+        console.error(`Failed to fetch ${urls[idx]} - Status: ${res.status}`);
+        return null;
+      }
+    })
+  );
+}
 // checks if workforce has been authenticated, if so get the user data
 async function fetchUserData(fromHeaderCallback) {
   // since the background script is polled only run the function if the authentication has begun.
-  if (thdAuthState != THD_AUTH_STATES.AUTHENTICATING) {
-    try {
-      if (fetchedJsons.userDetails?.firstName) {
-        console.log(fetchedJsons)
-        thdAuthState = THD_AUTH_STATES.AUTH_SUCCESS;
-        sendMessage({ fetchedJsons: true });
-      } else if (await urls.gottenAllUrls()) {
-        thdAuthState = THD_AUTH_STATES.AUTHENTICATING;
-        // should change to loading page if on instructions page
-        sendMessage({ fetchedJsons: "pending" });
-        const results = await Promise.all([
-          fetch(urls.details),
-          fetch(urls.userDetails),
-        ]);
+  // if (thdAuthState == THD_AUTH_STATES.AUTHENTICATING) return;
+  try {
+    if (userDataFetched()) {
+      updateAuthState(THD_AUTH_STATES.AUTH_SUCCESS, {
+        fetchedJsons: "success",
+      });
+      return true;
+    }
+    updateAuthState(THD_AUTH_STATES.AUTHENTICATING, {
+      fetchedJsons: "pending",
+    });
 
-        const [details, userDetails] = await Promise.all(
-          results.map(async (r) => {
-            let res;
-            if (r.status === 200) {
-              res = await r.json();
-              // console.log("json", res);
-            } else {
-              res = await r.text();
-              // console.log("not json", res);
-            }
-            return res;
-          })
-        );
-        fetchedJsons = {
-          details,
-          userDetails,
-        };
-        thdAuthState = THD_AUTH_STATES.AUTH_SUCCESS;
-        sendMessage({ fetchedJsons: "success" });
-        // or sendMessage({updateButtonEnable: true});
-        return true;
-      }
-      //The else block sets the authState to false when the user has simply not logged in to workforce.
-      //also if all urls weren't found after waiting 2s after all networks requests from refresh
-      else if (
-        !fromHeaderCallback ||
-        Date.now() - lastReceivedHeaderTimer > 10000
-      ) {
-        console.log(
-          fromHeaderCallback,
-          "did not get all urls",
-          urls.details,
-          urls.userDetails
-        );
-        thdAuthState = THD_AUTH_STATES.AUTH_FAILED;
-        sendMessage({ fetchedJsons: "failed" });
+    const urlsReady = await urls.gottenAllUrls();
+    const headerTimeout = Date.now() - lastReceivedHeaderTimer > 5000;
+
+    if (urlsReady) {
+      const [details, userDetails] = await fetchAllJson([
+        fetch(urls.details),
+        fetch(urls.userDetails),
+      ]);
+
+      if (!details || !userDetails) {
+        updateAuthState(THD_AUTH_STATES.AUTH_FAILED, {
+          fetchedJsons: "failed",
+        });
         return false;
       }
-    } catch (err) {
-      sendMessage({ nextPage: Pages.INSTRUCTIONS });
-      thdAuthState = THD_AUTH_STATES.AUTH_FAILED;
-      urls.clearAllUrls();
-      console.warn(err);
+
+      fetchedJsons = {
+        details,
+        userDetails,
+      };
+      updateAuthState(THD_AUTH_STATES.AUTH_SUCCESS, {
+        fetchedJsons: "success",
+      });
+      return true;
     }
-    // swDisabled = false;
+
+    if (!fromHeaderCallback || headerTimeout) {
+      updateAuthState(THD_AUTH_STATES.AUTH_FAILED, { fetchedJsons: "failed" });
+      return false;
+    }
+  } catch (err) {
+    updateAuthState(THD_AUTH_STATES.AUTH_FAILED, {
+      nextPage: Pages.INSTRUCTIONS,
+    });
+    urls.clearAllUrls();
+    console.warn(err);
     return false;
   }
+  return false;
 }
 
 async function makeCalendar() {
@@ -206,11 +223,11 @@ async function deleteCalendar(calIds) {
 }
 
 //adds calendar to users calendar list
-async function addToCalendarList(reminder = constants.defaultReminder, calID) {
+async function addToCalendarList(reminder = constants.defaultReminder, calId) {
   let init = { ...globalInit };
   init.method = "POST";
   init.body = JSON.stringify({
-    id: calID,
+    id: calId,
     backgroundColor: "#F96302",
     foregroundColor: "#FFFFFF",
     defaultReminders: reminder,
@@ -226,35 +243,15 @@ async function addToCalendarList(reminder = constants.defaultReminder, calID) {
   }
 }
 
-async function addEventsToCalendar(events, formData) {
-  // if (!calID) {
-  console.log("I'm supposed to add events and should be called once");
-  apiState = API_STATES.WAITING;
-  sendMessage({ nextPage: Pages.LOADING });
-  let calID;
-  try {
-    calID = await makeCalendar();
-    addToCalendarList(
-      { method: formData.method, minutes: formData.minutes },
-      calID
-    );
-    // apiState = API_STATES.SUCCESS;
-  } catch (error) {
-    console.warn(error);
-    apiState = API_STATES.FAILED;
-    sendMessage({ nextPage: Pages.INSTRUCTIONS });
-  }
-  // The HTTP headers for the outer batch request, except for the Content- headers such as Content-Type, apply to every request in the batch. If you specify a given HTTP header in both the outer request and an individual call, then the individual call header's value overrides the outer batch request header's value. The headers for an individual call apply only to that call.
+//separate into 2 functions
+async function addEventsToCalendar(events, calId) {
   let init = { ...globalInit };
-  const location = formData.location;
   init.method = "POST";
-  // console.log(events)
   return Promise.all(
     events.map((event) => {
-      const body = JSON.stringify({ ...event, location });
-      //Each part begins with its own Content-Type: application/http HTTP header.
+      const body = JSON.stringify(event);
       return fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/${calID}/events`,
+        `https://www.googleapis.com/calendar/v3/calendars/${calId}/events`,
         {
           ...init,
           body,
@@ -270,26 +267,21 @@ async function addEventsToCalendar(events, formData) {
     )
 
     .then((data) => {
-      // console.log(JSON.parse(JSON.stringify(data)));
-      apiState = API_STATES.SUCCESS;
-      sendMessage({
-        nextPage: Pages.CALENDAR,
-        fetchedJsons: fetchedJsons.userDetails?.firstName != undefined,
-      });
+      console.log("success");
+      return true;
     })
     .catch((err) => {
       console.warn(err);
-      apiState = API_STATES.FAILED;
-      sendMessage({ nextPage: Pages.INSTRUCTIONS });
+      return false;
     });
 }
 
-function shareCalendar(email, calID) {
+function shareCalendar(email, calId) {
   // set apiState so that share calendar disables the share button when in waiting/loading state then shows the appropriate message for failure and success
   apiState = API_STATES.WAITING;
   sendMessage({ shareButtonHandled: API_STATES.WAITING });
   let init = { ...globalInit };
-  console.log("shareCalendar called", init, authState, email, calID);
+  console.log("shareCalendar called", init, authState, email, calId);
   init.method = "POST";
   const body = JSON.stringify({
     scope: {
@@ -298,7 +290,7 @@ function shareCalendar(email, calID) {
     },
     role: "reader",
   });
-  fetch(`https://www.googleapis.com/calendar/v3/calendars/${calID}/acl`, {
+  fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/acl`, {
     ...init,
     body,
   })
@@ -323,15 +315,43 @@ function shareCalendar(email, calID) {
     });
 }
 
-function updateCalendar(
-  calId = "fc73be9c24e5bc970d447c49a9b1388b66d0edcc813fb6e04af385677898873b@group.calendar.google.com"
-) {
+async function updateCalendar(calId) {
   // update button will be disabled until fetchedJson is filled
   // we need to tell the user how to get the most up to date info
-  fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${calId}/events`,
-    ...globalInit
-  )
+
+  function fetchAll(urls, method) {
+    return Promise.all(
+      urls.map(({ url, payload }) => {
+        const body = payload ? JSON.stringify(payload) : "";
+        console.log("url", url);
+        console.log("body", body);
+        return fetch(url, {
+          ...globalInit,
+          method,
+          body,
+        })
+          .then((res) => {
+            if (res.ok) {
+              console.log(res.status)
+              return method=="PUT" ? res.json() : res.text();
+            }
+            throw new Error(res.text());
+          })
+          .then((data) => {
+            console.log(method, " success");
+            console.log(data);
+          })
+          .catch((err) => {
+            console.log(method);
+            console.warn(err);
+          });
+      })
+    );
+  }
+
+  fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events`, {
+    ...globalInit,
+  })
     .then((res) => {
       if (res.ok) {
         return res.json();
@@ -339,7 +359,45 @@ function updateCalendar(
       throw new Error(res.status);
     })
     .then((data) => {
-      console.log(data);
+      const events = parseDiff(
+        data,
+        fetchedJsons.details,
+        fetchedJsons.userDetails.timeZoneCode
+      );
+
+      console.log(events);
+
+      // addEventsToCalendar(events["POST"], calId);
+      console.log(calId, events["PUT"][0]);
+      // fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${events['PUT'][0].eventId}`,
+      //   {
+      //     ...globalInit,
+      //     method: "PUT",
+      //     body: JSON.stringify(events['PUT'][0].payload)
+      //   }
+      // ).then((res) => {
+      //   if(res.ok) {
+      //     return res.text();
+      //   }
+      //   throw new Error(res.status)
+      // }).then((data) => {
+      //   console.log(data)
+      // }).catch((err) => {
+      //   console.warn(err);
+      // })
+      fetchAll(
+        events["DELETE"].map((eventId) => ({
+          url: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${eventId}`,
+        })),
+        "DELETE"
+      );
+      fetchAll(
+        events["PUT"].map(({ payload, eventId }) => ({
+          url: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${eventId}`,
+          payload,
+        })),
+        "PUT"
+      );
     })
     .catch((err) => {
       console.warn(err);
@@ -405,6 +463,7 @@ const onHeadersReceivedCallback = async (details) => {
   //BUG: error in console when wft logs out url start from identity.homedepot.com/idp [exact redirect url: https://identity.homedepot.com/idp/DRON2_2tHsN/resume/idp/startSLO.ping]
 
   fetchUserData(true);
+
   if (urls.detailsMatch(currUrl)) urls.details = currUrl;
   else if (urls.userDetailsMatch(currUrl)) {
     urls.userDetails = currUrl;
@@ -413,125 +472,6 @@ const onHeadersReceivedCallback = async (details) => {
   sendMessage({ updateRefresh: true });
 };
 
-// const onMessageCallback = (req, _, sendResponse) => {
-//   const genericHandler = async (event) => {
-//     const actions = {
-//       addEvents: () => {
-//         addEventsToCalendar(parseDays(fetchedJsons.details.days), req.formData);
-//       },
-//       delCal: () => {
-//         deleteCalendar([req.calID]);
-//       },
-//       shareButtonClicked: () => {
-//         shareCalendar(
-//           req.shareButtonClicked.email,
-//           req.shareButtonClicked.calID
-//         );
-//       },
-//     };
-
-//     // first thing's first check if google api has been authenticated
-//     if (
-//       authState == AUTH_STATES.UNAUTHENTICATED ||
-//       authState == AUTH_STATES.AUTH_FAILED
-//     ) {
-//       if (!timer?.tokenValid()) authenticate();
-//       sendResponse({ ready: false });
-//     } else if (timer?.tokenValid() && authState == AUTH_STATES.AUTH_SUCCESS) {
-//       try {
-//         if (
-//           thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS ||
-//           event == "delCal" ||
-//           req.shareButtonClicked
-//         ) {
-//           if (apiState == API_STATES.IDLE) {
-//             // console.log("apiState is idle so event will be called");
-//             actions[event]();
-//           } else if (apiState == API_STATES.SUCCESS) {
-//             if (event == "shareButtonClicked") {
-//               sendResponse({ shareButtonHandled: "success" });
-//               apiState = API_STATES.IDLE;
-//             } else if (thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS) {
-//               if (event == "addEvents") {
-//                 sendResponse({ nextPage: "calendar", apiState: apiState });
-//                 apiState = API_STATES.IDLE;
-//               } else {
-//                 sendResponse({ nextPage: "form", apiState: apiState });
-//                 apiState = API_STATES.IDLE;
-//               }
-//             } else {
-//               console.log(`else block entered thdAuthState: ${thdAuthState}`);
-//               sendResponse({ nextPage: "instructions", apiState: apiState });
-//               apiState = API_STATES.IDLE;
-//             }
-//           } else {
-//             if (event == "shareButtonClicked") {
-//               if (apiState == API_STATES.FAILED) {
-//                 sendResponse({ shareButtonHandled: "failed" });
-//                 apiState = API_STATES.IDLE;
-//               } else if (apiState == API_STATES.WAITING) {
-//                 sendResponse({ shareButtonHandled: "pending" });
-//               }
-//             }
-
-//             // console.log(apiState);
-//             sendResponse({ apiState });
-//           }
-//         }
-//       } catch (error) {
-//         console.error(error);
-//       }
-//     } else if (authState == AUTH_STATES.AUTHENTICATING) {
-//       if (event == "shareButtonClicked") {
-//         sendResponse({ shareButtonHandled: "pending" });
-//       } else {
-//         sendResponse({ nextPage: "loading" });
-//       }
-//     }
-
-//     // else {
-//     //   console.log("else block hit, this is apiSate and thdAuthState: ", apiState, ", ", thdAuthState)
-//     // }
-//   };
-//   const handlers = {
-//     questionReady: () => {
-//       // checks if workforce has been logged into by calling fetchUserData (which also fetches the user data)
-//       fetchUserData();
-
-//       // depending on the state of thdAuthState change the page
-//       if (thdAuthState == THD_AUTH_STATES.AUTH_SUCCESS) {
-//         // console.log(`thdAuthState: ${thdAuthState}, apiState: ${apiState}, authState: ${authState}, event: ${req}, fetchedJsons: ${fetchedJsons}`);
-//         sendResponse({ wftAuthenticated: true, nextPage: "form" });
-//       } else if (thdAuthState == THD_AUTH_STATES.AUTHENTICATING) {
-//         sendResponse({ nextPage: "loading" });
-//       } else if (thdAuthState == THD_AUTH_STATES.AUTH_FAILED) {
-//         sendResponse({ nextPage: "instructions" });
-//       } else {
-//         // console.log(authState, thdAuthState, apiState);
-//         sendResponse({ nextPage: "loading" });
-//       }
-//     },
-//     makeIdle: () => (apiState = API_STATES.IDLE),
-//     addEvents: () => genericHandler("addEvents"),
-//     delCal: () => genericHandler("delCal"),
-//     shareButtonClicked: () => genericHandler("shareButtonClicked"),
-//   };
-
-//   // handlers called by popup.js
-//   const reqKeys = Object.keys(req);
-
-//   // if there are valid handler functions call them and return the function
-//   reqKeys.forEach((reqKey) => {
-//     if (handlers[reqKey]) {
-//       handlers[reqKey]();
-//       return true;
-//     }
-//   });
-//   // if no handlers were called return ready false
-//   // sendResponse({ ready: false, nextPage: "instructions" });
-//   return true;
-// };
-
 chrome.webRequest.onHeadersReceived.addListener(
   onHeadersReceivedCallback,
   filter,
@@ -539,7 +479,6 @@ chrome.webRequest.onHeadersReceived.addListener(
 );
 const onMessageCallback = (req, _, sendResponse) => {
   sendResponse({ awake: true });
-
   chrome.runtime.onConnect.addListener((p) => {
     port = p;
     port.onMessage.addListener(handleMessage);
@@ -558,20 +497,55 @@ chrome.runtime.onMessage.addListener(onMessageCallback);
 function handleMessage(message, sender) {
   const genericHandler = async (event) => {
     const actions = {
-      addEvents: () => {
-        addEventsToCalendar(
-          parseDays(fetchedJsons.details.days),
-          message.formData
+      addEvents: async () => {
+        apiState = API_STATES.WAITING;
+        sendMessage({ nextPage: Pages.LOADING });
+        try {
+          const calId = await makeCalendar();
+          addToCalendarList(
+            {
+              method: message.formData.method,
+              minutes: message.formData.minutes,
+            },
+            calId
+          );
+        } catch (error) {
+          console.warn(error);
+          apiState = API_STATES.FAILED;
+          sendMessage({ nextPage: Pages.INSTRUCTIONS });
+        }
+        const addEventSuccess = await addEventsToCalendar(
+          parseDays(
+            fetchedJsons.details.days,
+            message.formData.location,
+            fetchedJsons.userDetails.timeZoneCode
+          ),
+          calId
         );
+
+        console.log(addEventSuccess);
+        if (addEventSuccess) {
+          apiState = API_STATES.SUCCESS;
+          sendMessage({
+            nextPage: Pages.CALENDAR,
+            fetchedJsons: fetchedJsons.userDetails?.firstName != undefined,
+          });
+        } else {
+          apiState = API_STATES.FAILED;
+          sendMessage({ nextPage: Pages.INSTRUCTIONS });
+        }
       },
       delCal: () => {
-        deleteCalendar([message.calID]);
+        deleteCalendar([message.calId]);
       },
       shareButtonClicked: () => {
         shareCalendar(
           message.shareButtonClicked.email,
-          message.shareButtonClicked.calID
+          message.shareButtonClicked.calId
         );
+      },
+      updateButtonClicked: () => {
+        updateCalendar(message.updateButtonClicked.calId);
       },
     };
 
@@ -592,6 +566,9 @@ function handleMessage(message, sender) {
     addEvents: () => genericHandler("addEvents"),
     delCal: () => genericHandler("delCal"),
     shareButtonClicked: () => genericHandler("shareButtonClicked"),
+    updateButtonClicked: () => {
+      genericHandler("updateButtonClicked");
+    },
   };
   // const {questionReady} = message;
   //handle questionReady

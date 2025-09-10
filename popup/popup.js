@@ -9,7 +9,7 @@ const loading = document.querySelector("#loader-page");
 const form = document.querySelector("#form-page");
 const failedPage = document.querySelector("#failed-page");
 const formButton = form.querySelector("#form-submit");
-let calID = {};
+let calId = {};
 let port;
 const interval = 100;
 let countInterval;
@@ -134,7 +134,7 @@ function apiStatePoll(message, timeout = 5000) {
         changePage(Pages.FAILED);
       } else if (ready) {
         //check if authState is successful (not done yet) and if there is a valid calendar ID, show the delete/update page
-        if (calID) {
+        if (calId) {
           clearInterval(poller);
           changePage(Pages.CALENDAR);
         }
@@ -162,23 +162,35 @@ async function setRefreshTimeElapsed() {
   refreshTimeElapsed.innerText = duration.humanize();
 }
 
-// if connection is dead ping service worker then send message
 function sendMessage(message) {
-  port.postMessage(message);
+  if (port) {
+    port.postMessage(message);
+    return;
+  }
+
+  chrome.runtime.sendMessage({ type: "wake-up" }, (response) => {
+    console.log(response)
+    port = chrome.runtime.connect({ name: "wftSchedulerEventLoop" });
+    port.onMessage.addListener(handleMessage);
+    port.onDisconnect.addListener(() => {
+      port = null;
+    });
+    port.postMessage(message);
+  });
 }
 
 function handleMessage(message, sender) {
-  console.log(message, sender);
+  // console.log(message);
   const { fetchedJsons, nextPage, updateRefresh, shareButtonHandled } = message;
 
   // if fetchedJsons == true, check the current page and make the right decision
-  if (fetchedJsons == "success" && !calID) {
+  if (fetchedJsons == "success" && !calId) {
     changePage(Pages.FORM);
-  } else if (fetchedJsons == "success" && calID) {
+  } else if (fetchedJsons == "success" && calId) {
     pageElements.updateButton.disabled = false;
-  } else if (fetchedJsons == "pending" && !calID) {
+  } else if (fetchedJsons == "pending" && !calId) {
     changePage(Pages.LOADING);
-  } else if (fetchedJsons == "failed" && !calID) {
+  } else if (fetchedJsons == "failed" && !calId) {
     changePage(Pages.INSTRUCTIONS);
   } else if (updateRefresh) {
     setRefreshTimeElapsed();
@@ -221,13 +233,13 @@ function eventListenerSetup() {
   }
 
   // questionReady is to check whether thdAuthState [ workforce has been logged into]
-  if (calID) {
+  if (calId) {
     changePage(Pages.CALENDAR);
     addUserForm.addEventListener("submit", (event) => {
       event.preventDefault();
       sendMessage({
         shareButtonClicked: {
-          calID,
+          calId,
           email: event.target[0].value,
         },
       });
@@ -237,7 +249,7 @@ function eventListenerSetup() {
 
     updateButton.addEventListener("click", () => {
       sendMessage({
-        updateButtonClicked: calID,
+        updateButtonClicked: { calId },
       });
     });
   }
@@ -258,16 +270,16 @@ function eventListenerSetup() {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const formData = getFormData();
-    sendMessage({ addEvents: true, formData, calID });
+    sendMessage({ addEvents: true, formData, calId });
   });
 
   deleteCalButton.addEventListener("click", () => {
-    sendMessage({ delCal: true, calID });
+    sendMessage({ delCal: true, calId });
   });
 }
 
 window.onload = async function () {
-  calID = await getCalId();
+  calId = await getCalId();
   setRefreshTimeElapsed();
 
   chrome.runtime.sendMessage({ type: "wake-up" }, (response) => {
