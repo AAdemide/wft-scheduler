@@ -1,7 +1,7 @@
 import { AUTH_STATES, API_STATES, defaultReminder } from "./constants";
 import { TokenTimer } from "./utils";
 
-class gApiUtils {
+export default class gApiUtils {
   constructor(calId) {
     this.calId = calId;
     this.globalInit = {
@@ -16,6 +16,11 @@ class gApiUtils {
     };
     this.authState = AUTH_STATES.UNAUTHENTICATED;
     this.apiState = API_STATES.IDLE;
+  }
+
+  static async create() {
+    const calId = await makeCalendar();
+    return new gApiUtils(calId);
   }
 
   getOAuthURL(promptConsent = false) {
@@ -155,10 +160,8 @@ class gApiUtils {
   }
 
   async deleteCalendar() {
-    this.apiState = API_STATES.WAITING;
-    //   sendMessage({ nextPage: Pages.LOADING });
     const init = { ...this.globalInit, method: "DELETE" };
-    fetch(
+    return fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${this.calId}`,
       init
     )
@@ -169,9 +172,11 @@ class gApiUtils {
         throw new Error(res.status);
       }).then((data) => {
         console.log(data);
+        return true;
       })
       .catch((err) => {
         console.warn(err);
+        return false;
       });
   }
 
@@ -187,11 +192,11 @@ class gApiUtils {
       role: "reader",
     });
     let init = { ...this.globalInit, method: "POST", body };
-    fetch(`https://www.googleapis.com/calendar/v3/calendars/${this.calId}/acl`, init)
+    return fetch(`https://www.googleapis.com/calendar/v3/calendars/${this.calId}/acl`, init)
       .then(async (res) => {
         if (res.ok) {
-          this.apiState = constants.API_STATES.SUCCESS;
-        //   sendMessage({ shareButtonHandled: API_STATES.SUCCESS });
+          this.apiState = API_STATES.SUCCESS;
+
           return res.json();
         }
         return res.text().then((text) => {
@@ -201,10 +206,10 @@ class gApiUtils {
       })
       .then((data) => {
         console.log(data);
+        return true;
       })
       .catch((err) => {
         this.apiState = API_STATES.FAILED;
-        // sendMessage({ shareButtonHandled: API_STATES.FAILED });
         console.warn(err);
       });
   }
@@ -220,7 +225,7 @@ class gApiUtils {
           console.log("url", url);
           console.log("body", body);
           return fetch(url, {
-            ...globalInit,
+            ...this.globalInit,
             method,
             body,
           })
@@ -243,7 +248,7 @@ class gApiUtils {
       );
     }
 
-    fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events`, {
+    fetch(`https://www.googleapis.com/calendar/v3/calendars/${this.calId}/events`, {
       ...globalInit,
     })
       .then((res) => {

@@ -4,17 +4,16 @@ import * as utils from "../utils/utils.js";
 Object.assign(self, constants);
 Object.assign(self, utils);
 
+import gApiUtils from "../utils/gApiUtils.js";
+
 let port;
-let timer;
 let thdAuthState = THD_AUTH_STATES.IDLE;
 let authState = AUTH_STATES.UNAUTHENTICATED;
 let apiState = API_STATES.IDLE;
-// let swDisabled = false;
+let lastReceivedHeaderTimer;
 let fetchedJsons = {};
-let globalInit = {
-  async: true,
-  ["Content-Type"]: "application/json",
-};
+let gapi;
+
 let urls = {
   details: "",
   userDetails: "",
@@ -25,11 +24,7 @@ let urls = {
   async gottenAllUrls() {
     const result = this.details !== "" && this.userDetails !== "";
 
-    // console.log(` this.details: ${this.details}, this.userDetails: ${this.userDetails}`);
-
     if (result) {
-      // console.log("setting session storage", fetchedJsons);
-
       chrome.storage.session.set({
         urls: {
           details: this.details,
@@ -52,8 +47,6 @@ let urls = {
     this.userDetails = "";
   },
 };
-
-let lastReceivedHeaderTimer;
 
 function userDataFetched() {
   return fetchedJsons.userDetails?.firstName;
@@ -138,184 +131,7 @@ async function fetchUserData(fromHeaderCallback) {
   return false;
 }
 
-async function makeCalendar() {
-  let init = { ...globalInit };
-  init.method = "POST";
-  init.body = JSON.stringify({
-    summary: `${fetchedJsons.userDetails.firstName ?? ""} ${
-      fetchedJsons.userDetails.lastName ?? ""
-    }'s WFT Calendar`,
-    description: "A calendar of your work schedule at The Home Depot",
-  });
-  const res = await fetch(
-    "https://www.googleapis.com/calendar/v3/calendars",
-    init
-  );
-  const data = await res.json();
-  // console.log(data);
-  if (data.error) {
-    throw new Error(JSON.stringify(data.error));
-  }
-  const calendarID = JSON.parse(JSON.stringify(data)).id;
-  chrome.storage.sync.set({ "WFT-Scheduler Calendar ID": calendarID });
-  return calendarID;
-}
-
-async function deleteCalendar(calIds) {
-  // console.log("from delete calendar", apiState);
-  apiState = API_STATES.WAITING;
-  sendMessage({ nextPage: Pages.LOADING });
-  const init = { ...globalInit, method: "DELETE" };
-  const results = await Promise.allSettled(
-    calIds.map((id) =>
-      fetch(`https://www.googleapis.com/calendar/v3/calendars/${id}`, init)
-        .then((res) => {
-          // console.log(res.status);
-          return { id, status: res.status };
-        })
-        .catch((err) => {
-          console.log(err);
-          return { id, error: err };
-        })
-    )
-  );
-
-  // console.log(results);
-
-  const failed = [];
-  const succeeded = [];
-
-  for (const result of results) {
-    if (result.status === "fulfilled") {
-      if (
-        result.value.status == 200 ||
-        result.value.status == 204 ||
-        result.value.status == 404
-      ) {
-        succeeded.push(result.value.id);
-      } else {
-        failed.push(result.value.id);
-      }
-    } else {
-      failed.push(result.reason?.id ?? "Unknown");
-    }
-  }
-
-  if (succeeded.length > 0) {
-    chrome.storage.sync.remove("WFT-Scheduler Calendar ID");
-    // console.log("Successfully removed calendars:", succeeded);
-    apiState = API_STATES.SUCCESS;
-    if (fetchedJsons.userDetails?.firstName) {
-      sendMessage({ nextPage: Pages.INSTRUCTIONS });
-    } else {
-      sendMessage({ nextPage: Pages.FORM });
-    }
-  } else if (failed.length > 0) {
-    // console.log(`failed: ${failed}\nsucceeded: ${succeeded}\nresults: ${results}`)
-    apiState = API_STATES.FAILED;
-    sendMessage({ nextPage: Pages.INSTRUCTIONS });
-    console.warn("Failed to remove calendars:", failed);
-  }
-
-  // else {
-  //   apiState = API_STATES.IDLE;
-  // }
-}
-
-//adds calendar to users calendar list
-async function addToCalendarList(reminder = constants.defaultReminder, calId) {
-  let init = { ...globalInit };
-  init.method = "POST";
-  init.body = JSON.stringify({
-    id: calId,
-    backgroundColor: "#F96302",
-    foregroundColor: "#FFFFFF",
-    defaultReminders: reminder,
-  });
-
-  const res = await fetch(
-    "https://www.googleapis.com/calendar/v3/users/me/calendarList?colorRgbFormat=true",
-    init
-  );
-  const data = await res.json();
-  if (data.error) {
-    throw new Error(JSON.stringify(data.error));
-  }
-}
-
-//separate into 2 functions
-async function addEventsToCalendar(events, calId) {
-  let init = { ...globalInit };
-  init.method = "POST";
-  return Promise.all(
-    events.map((event) => {
-      const body = JSON.stringify(event);
-      return fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/${calId}/events`,
-        {
-          ...init,
-          body,
-        }
-      );
-    })
-  )
-    .then((res) =>
-      res.map((i) => {
-        const r = i.json();
-        return r;
-      })
-    )
-
-    .then((data) => {
-      console.log("success");
-      return true;
-    })
-    .catch((err) => {
-      console.warn(err);
-      return false;
-    });
-}
-
-function shareCalendar(email, calId) {
-  // set apiState so that share calendar disables the share button when in waiting/loading state then shows the appropriate message for failure and success
-  apiState = API_STATES.WAITING;
-  sendMessage({ shareButtonHandled: API_STATES.WAITING });
-  let init = { ...globalInit };
-  console.log("shareCalendar called", init, authState, email, calId);
-  init.method = "POST";
-  const body = JSON.stringify({
-    scope: {
-      type: "user",
-      value: email,
-    },
-    role: "reader",
-  });
-  fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/acl`, {
-    ...init,
-    body,
-  })
-    .then(async (res) => {
-      if (res.ok) {
-        apiState = constants.API_STATES.SUCCESS;
-        sendMessage({ shareButtonHandled: API_STATES.SUCCESS });
-        return res.json();
-      }
-      return res.text().then((text) => {
-        console.error("Error response:", text);
-        throw new Error(text);
-      });
-    })
-    .then((data) => {
-      console.log(data);
-    })
-    .catch((err) => {
-      apiState = API_STATES.FAILED;
-      sendMessage({ shareButtonHandled: API_STATES.FAILED });
-      console.warn(err);
-    });
-}
-
-async function updateCalendar(calId) {
+async function updateCalendar() {
   // update button will be disabled until fetchedJson is filled
   // we need to tell the user how to get the most up to date info
 
@@ -326,14 +142,14 @@ async function updateCalendar(calId) {
         console.log("url", url);
         console.log("body", body);
         return fetch(url, {
-          ...globalInit,
+          ...this.globalInit,
           method,
           body,
         })
           .then((res) => {
             if (res.ok) {
-              console.log(res.status)
-              return method=="PUT" ? res.json() : res.text();
+              console.log(res.status);
+              return method == "PUT" ? res.json() : res.text();
             }
             throw new Error(res.text());
           })
@@ -349,9 +165,12 @@ async function updateCalendar(calId) {
     );
   }
 
-  fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events`, {
-    ...globalInit,
-  })
+  fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${this.calId}/events`,
+    {
+      ...globalInit,
+    }
+  )
     .then((res) => {
       if (res.ok) {
         return res.json();
@@ -369,22 +188,6 @@ async function updateCalendar(calId) {
 
       // addEventsToCalendar(events["POST"], calId);
       console.log(calId, events["PUT"][0]);
-      // fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${events['PUT'][0].eventId}`,
-      //   {
-      //     ...globalInit,
-      //     method: "PUT",
-      //     body: JSON.stringify(events['PUT'][0].payload)
-      //   }
-      // ).then((res) => {
-      //   if(res.ok) {
-      //     return res.text();
-      //   }
-      //   throw new Error(res.status)
-      // }).then((data) => {
-      //   console.log(data)
-      // }).catch((err) => {
-      //   console.warn(err);
-      // })
       fetchAll(
         events["DELETE"].map((eventId) => ({
           url: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${eventId}`,
@@ -402,58 +205,6 @@ async function updateCalendar(calId) {
     .catch((err) => {
       console.warn(err);
     });
-}
-
-function getOAuthToken() {
-  return new Promise((resolve, reject) => {
-    // if(apiState==API_STATES.AUTH_FAILED) {
-    // chrome.identity.removeCachedAuthToken({token:oldToken});
-    // }
-    // console.log("globalInit", globalInit);
-    chrome.identity.launchWebAuthFlow(
-      {
-        url:
-          authState == AUTH_STATES.AUTH_FAILED ||
-          authState == AUTH_STATES.AUTHENTICATING
-            ? constants.getAuthURL(undefined, true)
-            : constants.getAuthURL(),
-        interactive: true,
-      },
-      (responseUrl) => {
-        if (chrome.runtime.lastError || !responseUrl) {
-          const error =
-            chrome.runtime.lastError?.message || "Authorization failed";
-          return reject(error);
-        }
-
-        const resUrl = new URL(responseUrl);
-        const params = new URLSearchParams(resUrl.hash.substring(1));
-
-        if (params.get("error")) return reject(params.get("error"));
-        resolve({
-          token: params.get("access_token"),
-          tokenType: params.get("token_type"),
-          expiresIn: parseInt(params.get("expires_in"), 10),
-        });
-      }
-    );
-  });
-}
-
-async function authenticate() {
-  authState = AUTH_STATES.AUTHENTICATING;
-  try {
-    const { token, expiresIn, tokenType } = await getOAuthToken();
-    globalInit.headers = {
-      Authorization: `${tokenType} ${token}`,
-    };
-    timer = new TokenTimer(expiresIn - 10);
-    timer.startTimer();
-    authState = AUTH_STATES.AUTH_SUCCESS;
-  } catch (error) {
-    console.error("OAuth error:", error);
-    authState = AUTH_STATES.AUTH_FAILED;
-  }
 }
 
 const onHeadersReceivedCallback = async (details) => {
@@ -484,10 +235,7 @@ const onMessageCallback = (req, _, sendResponse) => {
     port.onMessage.addListener(handleMessage);
 
     // first thing's first check if google api has been authenticated
-    if (!timer?.tokenValid()) authenticate();
-    // checks if workforce has been logged into by calling fetchUserData (which also fetches the user data)
-    // if (!fetchedJsons.userDetails?.firstName) {
-    // console.log("fetching and initializing connection");
+    if (!gapi?.getTimerTokenValid()) gapi.authenticate();
     fetchUserData();
     // }
   });
@@ -501,26 +249,30 @@ function handleMessage(message, sender) {
         apiState = API_STATES.WAITING;
         sendMessage({ nextPage: Pages.LOADING });
         try {
-          const calId = await makeCalendar();
-          addToCalendarList(
-            {
-              method: message.formData.method,
-              minutes: message.formData.minutes,
+          gapi = await gApiUtils.create();
+          const calOptions = {
+            id: gapi.getCalId(),
+            backgroundColor: "#F96302",
+            foregroundColor: "#FFFFFF",
+            defaultReminders: {
+              method:
+                message?.formData?.method || constants.defaultReminder.method,
+              minutes:
+                message?.formData?.minutes || constants.defaultReminder.minutes,
             },
-            calId
-          );
+          };
+          gapi.addToCalendarList(calOptions);
         } catch (error) {
           console.warn(error);
           apiState = API_STATES.FAILED;
           sendMessage({ nextPage: Pages.INSTRUCTIONS });
         }
-        const addEventSuccess = await addEventsToCalendar(
+        const addEventSuccess = await gapi.addEventsToCalendar(
           parseDays(
             fetchedJsons.details.days,
             message.formData.location,
             fetchedJsons.userDetails.timeZoneCode
-          ),
-          calId
+          )
         );
 
         console.log(addEventSuccess);
@@ -535,14 +287,36 @@ function handleMessage(message, sender) {
           sendMessage({ nextPage: Pages.INSTRUCTIONS });
         }
       },
-      delCal: () => {
-        deleteCalendar([message.calId]);
+      delCal: async () => {
+        apiState = API_STATES.WAITING;
+        sendMessage({ nextPage: Pages.LOADING });
+        gapi = new gApiUtils(message.calId);
+        const deleteCalendarSuccess = await gapi.deleteCalendar();
+        if (deleteCalendarSuccess) {
+          apiState = API_STATES.SUCCESS;
+          if (fetchedJsons.userDetails?.firstName) {
+            sendMessage({ nextPage: Pages.INSTRUCTIONS });
+          } else {
+            sendMessage({ nextPage: Pages.FORM });
+          }
+        } else {
+          apiState = API_STATES.FAILED;
+          sendMessage({ nextPage: Pages.INSTRUCTIONS });
+        }
       },
-      shareButtonClicked: () => {
-        shareCalendar(
+      shareButtonClicked: async () => {
+        this.apiState = API_STATES.WAITING;
+        sendMessage({ shareButtonHandled: API_STATES.WAITING });
+        const shareCalendarSuccess = await shareCalendar(
           message.shareButtonClicked.email,
           message.shareButtonClicked.calId
         );
+
+        if (shareCalendarSuccess) {
+          sendMessage({ shareButtonHandled: API_STATES.SUCCESS });
+        } else {
+          sendMessage({ shareButtonHandled: API_STATES.FAILED });
+        }
       },
       updateButtonClicked: () => {
         updateCalendar(message.updateButtonClicked.calId);
@@ -556,10 +330,6 @@ function handleMessage(message, sender) {
         console.error(error);
       }
     }
-
-    // else {
-    //   console.log("else block hit, this is apiSate and thdAuthState: ", apiState, ", ", thdAuthState)
-    // }
   };
   const handlers = {
     makeIdle: () => (apiState = API_STATES.IDLE),

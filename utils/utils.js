@@ -12,7 +12,7 @@ export class TokenTimer {
         clearInterval(intervalId);
       }
     }),
-      (this.tokenValid = () => this.stopTime > this.currentTime);
+      (this.getTokenValid = () => this.stopTime > this.currentTime);
   }
 }
 
