@@ -1,18 +1,11 @@
 import { AUTH_STATES, API_STATES, defaultReminder } from "./constants";
-import { TokenTimer } from "./utils";
 
-export default class gApiUtils {
+export default class GApiUtils {
   constructor(calId) {
     this.calId = calId;
     this.globalInit = {
       async: true,
       ["Content-Type"]: "application/json",
-    };
-    this.auth_params = {
-      client_id: chrome.runtime.getManifest().oauth2.client_id,
-      redirect_uri: chrome.identity.getRedirectURL(),
-      response_type: "token",
-      scope: "https://www.googleapis.com/auth/calendar",
     };
     this.authState = AUTH_STATES.UNAUTHENTICATED;
     this.apiState = API_STATES.IDLE;
@@ -23,89 +16,22 @@ export default class gApiUtils {
     return new gApiUtils(calId);
   }
 
-  getOAuthURL(promptConsent = false) {
-    let url;
-    if (promptConsent)
-      url = new URLSearchParams(
-        Object.entries({ ...this.auth_params, prompt: "consent" })
-      );
-    else {
-      url = new URLSearchParams(Object.entries(this.auth_params));
-    }
-    return "https://accounts.google.com/o/oauth2/auth?" + url.toString();
-  }
-
-  getOAuthToken(authFlowOptions) {
-    return new Promise((resolve, reject) => {
-      chrome.identity.launchWebAuthFlow(authFlowOptions, (responseUrl) => {
-        if (chrome.runtime.lastError || !responseUrl) {
-          const error =
-            chrome.runtime.lastError?.message || "Authorization failed";
-          return reject(error);
-        }
-
-        const resUrl = new URL(responseUrl);
-        const params = new URLSearchParams(resUrl.hash.substring(1));
-
-        if (params.get("error")) return reject(params.get("error"));
-        resolve({
-          token: params.get("access_token"),
-          tokenType: params.get("token_type"),
-          expiresIn: parseInt(params.get("expires_in"), 10),
-        });
-      });
-    });
-  }
-
-  async authenticate() {
-    // if(this.authState == AUTH_STATES.AUTHENTICATING) {
-    //     return;
-    // }
-    this.authState = AUTH_STATES.AUTHENTICATING;
-    try {
-      const promptConsent =
-        (this.authState == AUTH_STATES.AUTH_FAILED ||
-          this.authState == AUTH_STATES.AUTHENTICATING) ??
-        false;
-      const authFlowOptions = {
-        url: getOAuthURL(promptConsent),
-        interactive: true,
-      };
-      const { token, expiresIn, tokenType } = await getOAuthToken(
-        authFlowOptions
-      );
-      this.globalInit.headers = {
-        Authorization: `${tokenType} ${token}`,
-      };
-      this.timer = new TokenTimer(expiresIn - 10);
-      this.timer.startTimer();
-      this.authState = AUTH_STATES.AUTH_SUCCESS;
-    } catch (error) {
-      console.error("OAuth error:", error);
-      this.authState = AUTH_STATES.AUTH_FAILED;
-    }
-  }
-
-  async makeCalendar() {
-    let init = { ...this.globalInit };
-    init.method = "POST";
-    init.body = JSON.stringify({
-      summary: `${fetchedJsons.userDetails.firstName ?? ""} ${
-        fetchedJsons.userDetails.lastName ?? ""
-      }'s WFT Calendar`,
-      description: "A calendar of your work schedule at The Home Depot",
-    });
+  async makeCalendar(body) {
+    let init = {
+      ...this.globalInit,
+      method: "POST",
+      body: JSON.stringify(body),
+    };
     const res = await fetch(
       "https://www.googleapis.com/calendar/v3/calendars",
       init
     );
     const data = await res.json();
-    // console.log(data);
     if (data.error) {
       throw new Error(JSON.stringify(data.error));
     }
     const calendarID = JSON.parse(JSON.stringify(data)).id;
-    chrome.storage.sync.set({ "WFT-Scheduler Calendar ID": calendarID });
+    this.calId = calendarID;
     return calendarID;
   }
 
@@ -170,7 +96,8 @@ export default class gApiUtils {
           return text();
         }
         throw new Error(res.status);
-      }).then((data) => {
+      })
+      .then((data) => {
         console.log(data);
         return true;
       })
@@ -192,7 +119,10 @@ export default class gApiUtils {
       role: "reader",
     });
     let init = { ...this.globalInit, method: "POST", body };
-    return fetch(`https://www.googleapis.com/calendar/v3/calendars/${this.calId}/acl`, init)
+    return fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${this.calId}/acl`,
+      init
+    )
       .then(async (res) => {
         if (res.ok) {
           this.apiState = API_STATES.SUCCESS;
@@ -248,9 +178,12 @@ export default class gApiUtils {
       );
     }
 
-    fetch(`https://www.googleapis.com/calendar/v3/calendars/${this.calId}/events`, {
-      ...globalInit,
-    })
+    fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${this.calId}/events`,
+      {
+        ...globalInit,
+      }
+    )
       .then((res) => {
         if (res.ok) {
           return res.json();
@@ -293,6 +226,12 @@ export default class gApiUtils {
 
   getCalId() {
     return this.calId;
+  }
+
+  setAuthorizationHeader(tokenType, token) {
+    this.globalInit.headers = {
+      Authorization: `${tokenType} ${token}`,
+    };
   }
 }
 

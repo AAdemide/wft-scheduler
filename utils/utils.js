@@ -1,21 +1,5 @@
 import * as constants from "../utils/constants.js";
 
-export class TokenTimer {
-  constructor(stopTime) {
-    this.currentTime = 0;
-    this.stopTime = stopTime;
-    (this.startTimer = () => {
-      const intervalId = setInterval(() => {
-        this.currentTime++;
-      }, 1000);
-      if (stopTime < this.currentTime) {
-        clearInterval(intervalId);
-      }
-    }),
-      (this.getTokenValid = () => this.stopTime > this.currentTime);
-  }
-}
-
 const isPreviousDay = (day) => {
   const prevDay = new Date(day).toLocaleDateString("en-GB");
   const now = new Date().toLocaleDateString("en-GB");

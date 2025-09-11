@@ -4,7 +4,8 @@ import * as utils from "../utils/utils.js";
 Object.assign(self, constants);
 Object.assign(self, utils);
 
-import gApiUtils from "../utils/gApiUtils.js";
+import GApiUtils from "../utils/gApiUtils.js";
+import OAuthManager from "../utils/OAuthManager.js";
 
 let port;
 let thdAuthState = THD_AUTH_STATES.IDLE;
@@ -12,7 +13,8 @@ let authState = AUTH_STATES.UNAUTHENTICATED;
 let apiState = API_STATES.IDLE;
 let lastReceivedHeaderTimer;
 let fetchedJsons = {};
-let gapi;
+const gapi = new GApiUtils();
+const oathManager = new OAuthManager();
 
 let urls = {
   details: "",
@@ -131,6 +133,32 @@ async function fetchUserData(fromHeaderCallback) {
   return false;
 }
 
+async function authenticate() {
+  // if(this.authState == AUTH_STATES.AUTHENTICATING) {
+  //     return;
+  // }
+  authState = AUTH_STATES.AUTHENTICATING;
+  try {
+    const promptConsent =
+      (authState == AUTH_STATES.AUTH_FAILED ||
+        authState == AUTH_STATES.AUTHENTICATING) ??
+      false;
+    const authFlowOptions = {
+      url: oathManager.getOAuthURL(promptConsent),
+      interactive: true,
+    };
+    const { token, expiresIn, tokenType } = await getOAuthToken(
+      authFlowOptions
+    );
+    gapi.setAuthorizationHeader(tokenType, token);
+    oathManager.setTimer(new TokenTimer(expiresIn - 10));
+    authState = AUTH_STATES.AUTH_SUCCESS;
+  } catch (error) {
+    console.error("OAuth error:", error);
+    authState = AUTH_STATES.AUTH_FAILED;
+  }
+}
+
 async function updateCalendar() {
   // update button will be disabled until fetchedJson is filled
   // we need to tell the user how to get the most up to date info
@@ -235,9 +263,8 @@ const onMessageCallback = (req, _, sendResponse) => {
     port.onMessage.addListener(handleMessage);
 
     // first thing's first check if google api has been authenticated
-    if (!gapi?.getTimerTokenValid()) gapi.authenticate();
+    if (!oathManager.getTimerTokenValid()) authenticate();
     fetchUserData();
-    // }
   });
 };
 chrome.runtime.onMessage.addListener(onMessageCallback);
@@ -248,8 +275,15 @@ function handleMessage(message, sender) {
       addEvents: async () => {
         apiState = API_STATES.WAITING;
         sendMessage({ nextPage: Pages.LOADING });
+
+        const body = {
+          summary: `${fetchedJsons.userDetails.firstName ?? ""} ${
+            fetchedJsons.userDetails.lastName ?? ""
+          }'s WFT Calendar`,
+          description: "A calendar of your work schedule at The Home Depot",
+        };
         try {
-          gapi = await gApiUtils.create();
+          chrome.storage.sync.set({ "WFT-Scheduler Calendar ID": await gapi.makeCalendar(body) });
           const calOptions = {
             id: gapi.getCalId(),
             backgroundColor: "#F96302",
@@ -290,10 +324,13 @@ function handleMessage(message, sender) {
       delCal: async () => {
         apiState = API_STATES.WAITING;
         sendMessage({ nextPage: Pages.LOADING });
-        gapi = new gApiUtils(message.calId);
+        if(!gapi.getCalId) {
+          gapi.setCalId(message.calId);
+        }
         const deleteCalendarSuccess = await gapi.deleteCalendar();
         if (deleteCalendarSuccess) {
           apiState = API_STATES.SUCCESS;
+          chrome.storage.sync.remove("WFT-Scheduler Calendar ID");
           if (fetchedJsons.userDetails?.firstName) {
             sendMessage({ nextPage: Pages.INSTRUCTIONS });
           } else {
