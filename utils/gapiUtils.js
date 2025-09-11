@@ -1,4 +1,4 @@
-import { AUTH_STATES, API_STATES, defaultReminder } from "./constants";
+import { AUTH_STATES, API_STATES } from "./constants.js";
 
 export default class GApiUtils {
   constructor(calId) {

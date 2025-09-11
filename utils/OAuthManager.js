@@ -41,6 +41,10 @@ export default class OAuthManager {
     });
   }
 
+  createTimer(expiresIn) {
+    this.timer = new TokenTimer(expiresIn);
+  }
+
   setTimer(timer) {
     this.timer = timer;
     this.timer.startTimer();
