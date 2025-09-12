@@ -15,7 +15,7 @@ try {
   let lastReceivedHeaderTimer;
   let fetchedJsons = {};
   const gapi = new GApiUtils();
-  const oathManager = new OAuthManager();
+  const oauthManager = new OAuthManager();
 
   let urls = {
     details: "",
@@ -147,14 +147,13 @@ try {
           authState == AUTH_STATES.AUTHENTICATING) ??
         false;
       const authFlowOptions = {
-        url: oathManager.getOAuthURL(promptConsent),
+        url: oauthManager.getOAuthURL(promptConsent),
         interactive: true,
       };
-      const { token, expiresIn, tokenType } = await oathManager.getOAuthToken(
+      const { token, tokenType } = await oauthManager.getOAuthToken(
         authFlowOptions
       );
       gapi.setAuthorizationHeader(tokenType, token);
-      oathManager.createTimer(expiresIn - 10);
       authState = AUTH_STATES.AUTH_SUCCESS;
     } catch (error) {
       console.error("OAuth error:", error);
@@ -259,19 +258,19 @@ try {
     filter,
     []
   );
-  const onMessageCallback = (req, _, sendResponse) => {
+  const onMessageCallback = (_req, _, sendResponse) => {
     sendResponse({ awake: true });
     chrome.runtime.onConnect.addListener((p) => {
       port = p;
       port.onMessage.addListener(handleMessage);
       // first thing's first check if google api has been authenticated
-      if (!oathManager.getTimerTokenValid()) authenticate();
+      if (!oauthManager.getTimerTokenValid()) authenticate();
       fetchUserData();
     });
   };
   chrome.runtime.onMessage.addListener(onMessageCallback);
 
-  function handleMessage(message, sender) {
+  function handleMessage(message, _sender) {
     const genericHandler = async (event) => {
       const actions = {
         addEvents: async () => {
@@ -319,7 +318,7 @@ try {
             apiState = API_STATES.SUCCESS;
             sendMessage({
               nextPage: Pages.CALENDAR,
-              fetchedJsons: fetchedJsons.userDetails?.firstName != undefined,
+              fetchedJsons: userDataFetched(),
             });
           } else {
             apiState = API_STATES.FAILED;
@@ -330,17 +329,17 @@ try {
           console.log("delete button clicked");
           apiState = API_STATES.WAITING;
           sendMessage({ nextPage: Pages.LOADING });
-          if (!gapi.getCalId) {
+          if (!gapi.getCalId()) {
             gapi.setCalId(message.calId);
           }
           const deleteCalendarSuccess = await gapi.deleteCalendar();
           if (deleteCalendarSuccess) {
             apiState = API_STATES.SUCCESS;
             chrome.storage.sync.remove("WFT-Scheduler Calendar ID");
-            if (fetchedJsons.userDetails?.firstName) {
-              sendMessage({ nextPage: Pages.INSTRUCTIONS });
-            } else {
+            if (userDataFetched()) {
               sendMessage({ nextPage: Pages.FORM });
+            } else {
+              sendMessage({ nextPage: Pages.INSTRUCTIONS });
             }
           } else {
             apiState = API_STATES.FAILED;
@@ -348,12 +347,14 @@ try {
           }
         },
         shareButtonClicked: async () => {
+          console.log("got here");
           this.apiState = API_STATES.WAITING;
           sendMessage({ shareButtonHandled: API_STATES.WAITING });
-          const shareCalendarSuccess = await shareCalendar(
+          const shareCalendarSuccess = await gapi.shareCalendar(
             message.shareButtonClicked.email,
             message.shareButtonClicked.calId
           );
+          
 
           if (shareCalendarSuccess) {
             sendMessage({ shareButtonHandled: API_STATES.SUCCESS });
@@ -366,7 +367,7 @@ try {
         },
       };
 
-      if (timer?.tokenValid() && authState == AUTH_STATES.AUTH_SUCCESS) {
+      if (oauthManager.getTimerTokenValid()) {
         try {
           actions[event]();
         } catch (error) {
@@ -390,7 +391,6 @@ try {
     // if there are valid handler functions call them and return the function
     reqKeys.forEach((reqKey) => {
       if (handlers[reqKey]) {
-        console.log(reqKey);
         handlers[reqKey]();
       }
     });

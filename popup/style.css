@@ -261,7 +261,7 @@ button:disabled > img::before {
   font-size: .8rem;
 }
 
-#add-user {
+#share-cal {
   display: flex;
   text-align: start;
   justify-content: flex-start;
@@ -269,12 +269,12 @@ button:disabled > img::before {
   gap: .25rem;
 }
 
-#add-user > div { 
+#share-cal > div { 
   color: #ff3d00;
   display: flex;
 }
 
-#add-user > label {
+#share-cal > label {
   font-size: 1.15rem;
   margin-bottom: .5rem;
 }

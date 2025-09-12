@@ -9,17 +9,39 @@ export default class OAuthManager {
   }
   getOAuthURL(promptConsent = false) {
     let url;
-    if (promptConsent)
-      url = new URLSearchParams(
-        Object.entries({ ...this.auth_params, prompt: "consent" })
-      );
-    else {
-      url = new URLSearchParams(Object.entries(this.auth_params));
-    }
+    // if (promptConsent)
+    //   url = new URLSearchParams(
+    //     Object.entries({ ...this.auth_params, prompt: "consent" })
+    //   );
+    // else {
+    url = new URLSearchParams(Object.entries(this.auth_params));
+    //}
     return "https://accounts.google.com/o/oauth2/auth?" + url.toString();
   }
 
-  getOAuthToken(authFlowOptions) {
+  storeTokenWithExpiry(token, tokenType, expiresIn) {
+    chrome.storage.local.set({
+      sukunaFragment: {
+        token,
+        tokenType,
+        expiresIn: Date.now() + expiresIn * 1000,
+      },
+    });
+  }
+
+  async getOAuthToken(authFlowOptions) {
+    const { sukunaFragment } = await chrome.storage.local.get("sukunaFragment");
+    const { expiresIn, ...rest } = sukunaFragment;
+
+    if (expiresIn > Date.now()) {
+      this.expiresIn = expiresIn;
+      return rest;
+    }
+
+    console.log(
+      "token expired, last token timestamp:",
+      sukunaFragment.expiresIn
+    );
     return new Promise((resolve, reject) => {
       chrome.identity.launchWebAuthFlow(authFlowOptions, (responseUrl) => {
         if (chrome.runtime.lastError || !responseUrl) {
@@ -30,47 +52,32 @@ export default class OAuthManager {
 
         const resUrl = new URL(responseUrl);
         const params = new URLSearchParams(resUrl.hash.substring(1));
+        const token = params.get("access_token");
+        const tokenType = params.get("token_type");
+        this.expiresIn = expiresIn;
+        const expiresIn = parseInt(params.get("expires_in"), 10) - 60000 * 5;
+        this.expiresIn = expiresIn;
+
+        this.storeTokenWithExpiry(token, tokenType, expiresIn);
 
         if (params.get("error")) return reject(params.get("error"));
         resolve({
-          token: params.get("access_token"),
-          tokenType: params.get("token_type"),
-          expiresIn: parseInt(params.get("expires_in"), 10),
+          token,
+          tokenType
         });
       });
     });
   }
 
-  createTimer(expiresIn) {
-    this.timer = new TokenTimer(expiresIn);
-  }
-
-  setTimer(timer) {
-    this.timer = timer;
-    this.timer.startTimer();
-  }
-
-  startTimer(){
-    this.timer.startTimer()
+  async getExpiryTimestamp() {
+    if (this.expiresIn) {
+      return this.expiresIn;
+    }
+    const { sukunaFragment } = await chrome.storage.local.get("sukunaFragment");
+    return sukunaFragment.expiresIn;
   }
 
   getTimerTokenValid() {
     return this.timer?.getTokenValid();
-  }
-}
-
-class TokenTimer {
-  constructor(stopTime) {
-    this.currentTime = 0;
-    this.stopTime = stopTime;
-    (this.startTimer = () => {
-      const intervalId = setInterval(() => {
-        this.currentTime++;
-      }, 1000);
-      if (stopTime < this.currentTime) {
-        clearInterval(intervalId);
-      }
-    }),
-      (this.getTokenValid = () => this.stopTime > this.currentTime);
   }
 }

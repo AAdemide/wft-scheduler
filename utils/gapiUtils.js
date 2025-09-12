@@ -87,15 +87,16 @@ export default class GApiUtils {
 
   async deleteCalendar() {
     const init = { ...this.globalInit, method: "DELETE" };
+    console.log(this.calId, init)
     return fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${this.calId}`,
       init
     )
       .then((res) => {
         if (res.ok) {
-          return text();
+          return res.text();
         }
-        throw new Error(res.status);
+        throw new Error(res.status, res.text());
       })
       .then((data) => {
         console.log(data);
@@ -109,8 +110,7 @@ export default class GApiUtils {
 
   shareCalendar(email) {
     // set apiState so that share calendar disables the share button when in waiting/loading state then shows the appropriate message for failure and success
-    this.apiState = API_STATES.WAITING;
-    //   sendMessage({ shareButtonHandled: API_STATES.WAITING });
+    console.log("I have been called")
     const body = JSON.stringify({
       scope: {
         type: "user",
@@ -125,8 +125,6 @@ export default class GApiUtils {
     )
       .then(async (res) => {
         if (res.ok) {
-          this.apiState = API_STATES.SUCCESS;
-
           return res.json();
         }
         return res.text().then((text) => {
@@ -139,8 +137,8 @@ export default class GApiUtils {
         return true;
       })
       .catch((err) => {
-        this.apiState = API_STATES.FAILED;
         console.warn(err);
+        return false;
       });
   }
 

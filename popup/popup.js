@@ -23,9 +23,10 @@ const Pages = {
 };
 
 let currentPage = Pages.LOADING;
+  
 
 const pageElements = {
-  home: document.querySelector("#instruction-page"),
+  instructionPage: document.querySelector("#instruction-page"),
   calendarMade: document.querySelector("#calendar-made-page"),
   deleteCalButton: document.querySelector("#delete-calendar"),
   loading: document.querySelector("#loader-page"),
@@ -33,13 +34,14 @@ const pageElements = {
   failedPage: document.querySelector("#failed-page"),
   formButton: form.querySelector("#form-submit"),
   refreshTimeElapsed: document.querySelector("#refresh-time-elapsed"),
-  addUserForm: document.querySelector("#add-user"),
+  shareCalForm: document.querySelector("#share-cal"),
   updateButton: document.querySelector("#update-calendar"),
   shareButton: document.querySelector("#share-button"),
   shareInput: document.querySelector("#share-to-gmail"),
-  addUserForm: document.querySelector("#add-user"),
   shareCalSuccess: document.querySelector("#share-cal-success"),
   shareCalFailed: document.querySelector("#share-cal-failed"),
+  emailErr: document.querySelector("#email-error"),
+  orb: document.getElementById("cursor-orb"),
 };
 
 function getFormData() {
@@ -58,39 +60,37 @@ async function getCalId() {
 function changePage(page) {
   currentPage = page;
   pageElements.updateButton.disabled = true;
-  if (page == Pages.CALENDAR) {
-    calendarMade.classList.remove("hidden");
-    form.classList.add("hidden");
-    home.classList.add("hidden");
-    loading.classList.add("hidden");
-    failedPage.classList.add("hidden");
-  } else if (page == Pages.FORM) {
-    form.classList.remove("hidden");
-    calendarMade.classList.add("hidden");
-    home.classList.add("hidden");
-    loading.classList.add("hidden");
-    failedPage.classList.add("hidden");
-  } else if (page == Pages.INSTRUCTIONS) {
-    home.classList.remove("hidden");
-    form.classList.add("hidden");
-    calendarMade.classList.add("hidden");
-    loading.classList.add("hidden");
-    failedPage.classList.add("hidden");
 
-    // sendMessage({ makeIdle: true, questionReady: true });
-    // sendMessage({ makeIdle: true });
+  if (page == Pages.CALENDAR) {
+    pageElements.calendarMade.classList.remove("hidden");
+    pageElements.form.classList.add("hidden");
+    pageElements.instructionPage.classList.add("hidden");
+    pageElements.loading.classList.add("hidden");
+    pageElements.failedPage.classList.add("hidden");
+  } else if (page == Pages.FORM) {
+    pageElements.form.classList.remove("hidden");
+    pageElements.calendarMade.classList.add("hidden");
+    pageElements.instructionPage.classList.add("hidden");
+    pageElements.loading.classList.add("hidden");
+    pageElements.failedPage.classList.add("hidden");
+  } else if (page == Pages.INSTRUCTIONS) {
+    pageElements.instructionPage.classList.remove("hidden");
+    pageElements.form.classList.add("hidden");
+    pageElements.calendarMade.classList.add("hidden");
+    pageElements.loading.classList.add("hidden");
+    pageElements.failedPage.classList.add("hidden");
   } else if (page == Pages.LOADING) {
-    form.classList.add("hidden");
-    calendarMade.classList.add("hidden");
-    home.classList.add("hidden");
-    failedPage.classList.add("hidden");
-    loading.classList.remove("hidden");
+    pageElements.form.classList.add("hidden");
+    pageElements.calendarMade.classList.add("hidden");
+    pageElements.instructionPage.classList.add("hidden");
+    pageElements.failedPage.classList.add("hidden");
+    pageElements.loading.classList.remove("hidden");
   } else if (page == Pages.FAILED) {
-    form.classList.add("hidden");
-    calendarMade.classList.add("hidden");
-    home.classList.add("hidden");
-    loading.classList.add("hidden");
-    failedPage.classList.remove("hidden");
+    pageElements.form.classList.add("hidden");
+    pageElements.calendarMade.classList.add("hidden");
+    pageElements.instructionPage.classList.add("hidden");
+    pageElements.loading.classList.add("hidden");
+    pageElements.failedPage.classList.remove("hidden");
   }
 }
 
@@ -155,11 +155,10 @@ function apiStatePoll(message, timeout = 5000) {
 }
 
 async function setRefreshTimeElapsed() {
-  const refreshTimeElapsed = document.querySelector("#refresh-time-elapsed");
   const res = await chrome.storage.sync.get("refreshTimeElapsed");
   const pastTime = moment(res.refreshTimeElapsed);
-  const duration = moment.duration(moment().diff(pastTime));
-  refreshTimeElapsed.innerText = duration.humanize();
+  const duration = moment.duration(-1, moment().diff(pastTime));
+  pageElements.refreshTimeElapsed.innerText = duration.humanize();
 }
 
 function sendMessage(message) {
@@ -211,31 +210,26 @@ function handleMessage(message, sender) {
 }
 
 function eventListenerSetup() {
-  const addUserForm = document.querySelector("#add-user");
-  const updateButton = document.querySelector("#update-calendar");
-  const errorMsg = document.querySelector("#email-error");
   // Regex to validate gmail/googlemail
   const emailRegex = /^[a-zA-Z0-9._%+~-]+@(gmail\.com|googlemail\.com)$/;
-  const orb = document.getElementById("cursor-orb");
-  const instructionPage = document.getElementById("instruction-page");
 
-  if (orb && instructionPage) {
-    instructionPage.addEventListener(
+  // if (orb && instructionPage) {
+    pageElements.instructionPage.addEventListener(
       "mousemove",
       (e) => {
-        const rect = instructionPage.getBoundingClientRect();
+        const rect = pageElements.instructionPage.getBoundingClientRect();
         const x = e.clientX - 100;
         const y = e.clientY - 150;
         orb.style.transform = `translate(${x}px, ${y}px)`;
       },
       { passive: true }
     );
-  }
+  //}
 
   // questionReady is to check whether thdAuthState [ workforce has been logged into]
   if (calId) {
     changePage(Pages.CALENDAR);
-    addUserForm.addEventListener("submit", (event) => {
+    pageElements.shareCalForm.addEventListener("submit", (event) => {
       event.preventDefault();
       sendMessage({
         shareButtonClicked: {
@@ -247,7 +241,7 @@ function eventListenerSetup() {
       event.target[1].disabled = true;
     });
 
-    updateButton.addEventListener("click", () => {
+    pageElements.updateButton.addEventListener("click", () => {
       sendMessage({
         updateButtonClicked: { calId },
       });
@@ -267,13 +261,14 @@ function eventListenerSetup() {
 
     pageElements.shareButton.disabled = !isValidEmail;
   });
-  form.addEventListener("submit", (event) => {
+
+  pageElements.form.addEventListener("submit", (event) => {
     event.preventDefault();
     const formData = getFormData();
     sendMessage({ addEvents: true, formData, calId });
   });
 
-  deleteCalButton.addEventListener("click", () => {
+  pageElements.deleteCalButton.addEventListener("click", () => {
     sendMessage({ delCal: true, calId });
   });
 }
