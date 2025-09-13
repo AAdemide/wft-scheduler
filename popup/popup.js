@@ -1,14 +1,9 @@
 // import { API_STATES } from "../utils/constants";
 
 const wftURL = /https:\/\/wft.homedepot.com\/*/;
+// Regex to validate gmail/googlemail
+const emailRegex = /^[a-zA-Z0-9._%+~-]+@(gmail\.com|googlemail\.com)$/;
 
-const home = document.querySelector("#instruction-page");
-const calendarMade = document.querySelector("#calendar-made-page");
-const deleteCalButton = document.querySelector("#delete-calendar");
-const loading = document.querySelector("#loader-page");
-const form = document.querySelector("#form-page");
-const failedPage = document.querySelector("#failed-page");
-const formButton = form.querySelector("#form-submit");
 let calId = {};
 let port;
 const interval = 100;
@@ -23,7 +18,6 @@ const Pages = {
 };
 
 let currentPage = Pages.LOADING;
-  
 
 const pageElements = {
   instructionPage: document.querySelector("#instruction-page"),
@@ -32,7 +26,7 @@ const pageElements = {
   loading: document.querySelector("#loader-page"),
   form: document.querySelector("#form-page"),
   failedPage: document.querySelector("#failed-page"),
-  formButton: form.querySelector("#form-submit"),
+  formButton: document.querySelector("#form-submit"),
   refreshTimeElapsed: document.querySelector("#refresh-time-elapsed"),
   shareCalForm: document.querySelector("#share-cal"),
   updateButton: document.querySelector("#update-calendar"),
@@ -168,7 +162,7 @@ function sendMessage(message) {
   }
 
   chrome.runtime.sendMessage({ type: "wake-up" }, (response) => {
-    console.log(response)
+    console.log(response);
     port = chrome.runtime.connect({ name: "wftSchedulerEventLoop" });
     port.onMessage.addListener(handleMessage);
     port.onDisconnect.addListener(() => {
@@ -210,20 +204,17 @@ function handleMessage(message, sender) {
 }
 
 function eventListenerSetup() {
-  // Regex to validate gmail/googlemail
-  const emailRegex = /^[a-zA-Z0-9._%+~-]+@(gmail\.com|googlemail\.com)$/;
-
   // if (orb && instructionPage) {
-    pageElements.instructionPage.addEventListener(
-      "mousemove",
-      (e) => {
-        const rect = pageElements.instructionPage.getBoundingClientRect();
-        const x = e.clientX - 100;
-        const y = e.clientY - 150;
-        orb.style.transform = `translate(${x}px, ${y}px)`;
-      },
-      { passive: true }
-    );
+  pageElements.instructionPage.addEventListener(
+    "mousemove",
+    (e) => {
+      const rect = pageElements.instructionPage.getBoundingClientRect();
+      const x = e.clientX - 100;
+      const y = e.clientY - 150;
+      orb.style.transform = `translate(${x}px, ${y}px)`;
+    },
+    { passive: true }
+  );
   //}
 
   // questionReady is to check whether thdAuthState [ workforce has been logged into]
@@ -254,9 +245,9 @@ function eventListenerSetup() {
     const isValidEmail = emailRegex.test(value);
 
     if (value === "" || isValidEmail) {
-      errorMsg.classList.add("hidden");
+      pageElements.emailErr.classList.add("hidden");
     } else {
-      errorMsg.classList.remove("hidden");
+      pageElements.emailErr.classList.remove("hidden");
     }
 
     pageElements.shareButton.disabled = !isValidEmail;

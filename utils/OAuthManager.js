@@ -54,8 +54,8 @@ export default class OAuthManager {
         const params = new URLSearchParams(resUrl.hash.substring(1));
         const token = params.get("access_token");
         const tokenType = params.get("token_type");
-        this.expiresIn = expiresIn;
-        const expiresIn = parseInt(params.get("expires_in"), 10) - 60000 * 5;
+        const expiresIn = parseInt(params.get("expires_in"), 10)
+        //  - 60000 * 5;
         this.expiresIn = expiresIn;
 
         this.storeTokenWithExpiry(token, tokenType, expiresIn);
@@ -77,7 +77,11 @@ export default class OAuthManager {
     return sukunaFragment.expiresIn;
   }
 
-  getTimerTokenValid() {
-    return this.timer?.getTokenValid();
+  async getTokenValid(expiresIn) {
+    if(!expiresIn) {
+        expiresIn = this.expiresIn ?? await this.getExpiryTimestamp();
+    }
+    return Date.now() < expiresIn;
   }
+
 }

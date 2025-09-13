@@ -110,7 +110,6 @@ export default class GApiUtils {
 
   shareCalendar(email) {
     // set apiState so that share calendar disables the share button when in waiting/loading state then shows the appropriate message for failure and success
-    console.log("I have been called")
     const body = JSON.stringify({
       scope: {
         type: "user",
@@ -128,12 +127,11 @@ export default class GApiUtils {
           return res.json();
         }
         return res.text().then((text) => {
-          console.error("Error response:", text);
           throw new Error(text);
         });
       })
       .then((data) => {
-        console.log(data);
+        console.log(`${data.scope.value} has been invited to join your calendar`);
         return true;
       })
       .catch((err) => {

@@ -260,12 +260,13 @@ try {
   );
   const onMessageCallback = (_req, _, sendResponse) => {
     sendResponse({ awake: true });
-    chrome.runtime.onConnect.addListener((p) => {
+    chrome.runtime.onConnect.addListener(async (p) => {
       port = p;
       port.onMessage.addListener(handleMessage);
       // first thing's first check if google api has been authenticated
-      if (!oauthManager.getTimerTokenValid()) authenticate();
+      authenticate();
       fetchUserData();
+      return true;
     });
   };
   chrome.runtime.onMessage.addListener(onMessageCallback);
@@ -347,14 +348,12 @@ try {
           }
         },
         shareButtonClicked: async () => {
-          console.log("got here");
           this.apiState = API_STATES.WAITING;
           sendMessage({ shareButtonHandled: API_STATES.WAITING });
+          gapi.setCalId(message.shareButtonClicked.calId);
           const shareCalendarSuccess = await gapi.shareCalendar(
-            message.shareButtonClicked.email,
-            message.shareButtonClicked.calId
+            message.shareButtonClicked.email
           );
-          
 
           if (shareCalendarSuccess) {
             sendMessage({ shareButtonHandled: API_STATES.SUCCESS });
@@ -367,27 +366,33 @@ try {
         },
       };
 
-      if (oauthManager.getTimerTokenValid()) {
+      // console.log(oauthManager.getTimerTokenValid())
+      const tokenvalid = await oauthManager.getTokenValid();
+      console.log(tokenvalid)
+      if (tokenvalid) {
         try {
           actions[event]();
         } catch (error) {
           console.error(error);
         }
+      } else {
+        //authenticate and try again
+        console.log("token not valid")
       }
     };
+
+
     const handlers = {
       makeIdle: () => (apiState = API_STATES.IDLE),
       addEvents: () => genericHandler("addEvents"),
       delCal: () => genericHandler("delCal"),
       shareButtonClicked: () => genericHandler("shareButtonClicked"),
-      updateButtonClicked: () => {
-        genericHandler("updateButtonClicked");
-      },
+      updateButtonClicked: () => genericHandler("updateButtonClicked"),
     };
     // const {questionReady} = message;
     //handle questionReady
     const reqKeys = Object.keys(message);
-
+    
     // if there are valid handler functions call them and return the function
     reqKeys.forEach((reqKey) => {
       if (handlers[reqKey]) {
