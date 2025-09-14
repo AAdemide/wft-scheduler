@@ -85,12 +85,12 @@ try {
     try {
       if (userDataFetched()) {
         updateAuthState(THD_AUTH_STATES.AUTH_SUCCESS, {
-          fetchedJsons: "success",
+          fetchedJsons: THD_AUTH_STATES.AUTH_SUCCESS,
         });
         return true;
       }
       updateAuthState(THD_AUTH_STATES.AUTHENTICATING, {
-        fetchedJsons: "pending",
+        fetchedJsons: THD_AUTH_STATES.AUTHENTICATING,
       });
 
       const urlsReady = await urls.gottenAllUrls();
@@ -104,7 +104,7 @@ try {
 
         if (!details || !userDetails) {
           updateAuthState(THD_AUTH_STATES.AUTH_FAILED, {
-            fetchedJsons: "failed",
+            fetchedJsons: THD_AUTH_STATES.AUTH_FAILED,
           });
           return false;
         }
@@ -114,14 +114,14 @@ try {
           userDetails,
         };
         updateAuthState(THD_AUTH_STATES.AUTH_SUCCESS, {
-          fetchedJsons: "success",
+          fetchedJsons: THD_AUTH_STATES.AUTH_SUCCESS,
         });
         return true;
       }
 
       if (!fromHeaderCallback || headerTimeout) {
         updateAuthState(THD_AUTH_STATES.AUTH_FAILED, {
-          fetchedJsons: "failed",
+          fetchedJsons: THD_AUTH_STATES.AUTH_FAILED,
         });
         return false;
       }
@@ -159,82 +159,6 @@ try {
       console.error("OAuth error:", error);
       authState = AUTH_STATES.AUTH_FAILED;
     }
-  }
-
-  async function updateCalendar() {
-    // update button will be disabled until fetchedJson is filled
-    // we need to tell the user how to get the most up to date info
-
-    function fetchAll(urls, method) {
-      return Promise.all(
-        urls.map(({ url, payload }) => {
-          const body = payload ? JSON.stringify(payload) : "";
-          console.log("url", url);
-          console.log("body", body);
-          return fetch(url, {
-            ...this.globalInit,
-            method,
-            body,
-          })
-            .then((res) => {
-              if (res.ok) {
-                console.log(res.status);
-                return method == "PUT" ? res.json() : res.text();
-              }
-              throw new Error(res.text());
-            })
-            .then((data) => {
-              console.log(method, " success");
-              console.log(data);
-            })
-            .catch((err) => {
-              console.log(method);
-              console.warn(err);
-            });
-        })
-      );
-    }
-
-    fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${this.calId}/events`,
-      {
-        ...globalInit,
-      }
-    )
-      .then((res) => {
-        if (res.ok) {
-          return res.json();
-        }
-        throw new Error(res.status);
-      })
-      .then((data) => {
-        const events = parseDiff(
-          data,
-          fetchedJsons.details,
-          fetchedJsons.userDetails.timeZoneCode
-        );
-
-        console.log(events);
-
-        // addEventsToCalendar(events["POST"], calId);
-        console.log(calId, events["PUT"][0]);
-        fetchAll(
-          events["DELETE"].map((eventId) => ({
-            url: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${eventId}`,
-          })),
-          "DELETE"
-        );
-        fetchAll(
-          events["PUT"].map(({ payload, eventId }) => ({
-            url: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${eventId}`,
-            payload,
-          })),
-          "PUT"
-        );
-      })
-      .catch((err) => {
-        console.warn(err);
-      });
   }
 
   const onHeadersReceivedCallback = async (details) => {
@@ -310,7 +234,7 @@ try {
             parseDays(
               fetchedJsons.details.days,
               message.formData.location,
-              fetchedJsons.userDetails.timeZoneCode
+              // fetchedJsons.userDetails.timeZoneCode
             )
           );
 
@@ -361,26 +285,34 @@ try {
             sendMessage({ shareButtonHandled: API_STATES.FAILED });
           }
         },
-        updateButtonClicked: () => {
-          updateCalendar(message.updateButtonClicked.calId);
+        updateButtonClicked: async () => {
+          this.apiState = API_STATES.WAITING;
+          sendMessage({ updateButtonClicked: API_STATES.WAITING });
+          if (!gapi.getCalId()) {
+            gapi.setCalId(message.updateButtonClicked.calId);
+          }
+          console.log(fetchedJsons.userDetails);
+          const updateCalendarSuccess = await gapi.updateCalendar(fetchedJsons.details);
+
+          if(updateCalendarSuccess) {
+            sendMessage({ updateButtonClicked: API_STATES.SUCCESS });
+          } else  {
+            sendMessage({ updateButtonClicked: API_STATES.FAILED });
+          }
         },
       };
 
       // console.log(oauthManager.getTimerTokenValid())
-      const tokenvalid = await oauthManager.getTokenValid();
-      console.log(tokenvalid)
-      if (tokenvalid) {
-        try {
-          actions[event]();
-        } catch (error) {
-          console.error(error);
-        }
-      } else {
-        //authenticate and try again
-        console.log("token not valid")
+      const tokenValid = await oauthManager.getTokenValid();
+      if (!tokenValid) {
+        await authenticate();
+      }
+      try {
+        actions[event]();
+      } catch (error) {
+        console.error(error);
       }
     };
-
 
     const handlers = {
       makeIdle: () => (apiState = API_STATES.IDLE),
@@ -392,7 +324,7 @@ try {
     // const {questionReady} = message;
     //handle questionReady
     const reqKeys = Object.keys(message);
-    
+
     // if there are valid handler functions call them and return the function
     reqKeys.forEach((reqKey) => {
       if (handlers[reqKey]) {

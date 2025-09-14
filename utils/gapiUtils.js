@@ -1,4 +1,5 @@
 import { AUTH_STATES, API_STATES } from "./constants.js";
+import { parseDiff } from "./utils.js";
 
 export default class GApiUtils {
   constructor(calId) {
@@ -140,7 +141,7 @@ export default class GApiUtils {
       });
   }
 
-  async updateCalendar() {
+  async updateCalendar(fetchedSchedule) {
     // update button will be disabled until fetchedJson is filled
     // we need to tell the user how to get the most up to date info
 
@@ -186,30 +187,34 @@ export default class GApiUtils {
         }
         throw new Error(res.status);
       })
-      .then((data) => {
+      .then(async (calendarEvents) => {
         const events = parseDiff(
-          data,
-          fetchedJsons.details,
-          fetchedJsons.userDetails.timeZoneCode
+          calendarEvents,
+          fetchedSchedule,
         );
+
+        if(events.PUT.length == events.POST.length == events.DELETE.length == 0) {
+          return false;
+        }
 
         console.log(events);
 
-        // addEventsToCalendar(events["POST"], calId);
+        await addEventsToCalendar(events["POST"], calId);
         console.log(calId, events["PUT"][0]);
-        fetchAll(
+        await fetchAll(
           events["DELETE"].map((eventId) => ({
             url: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${eventId}`,
           })),
           "DELETE"
         );
-        fetchAll(
+        await fetchAll(
           events["PUT"].map(({ payload, eventId }) => ({
             url: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${eventId}`,
             payload,
           })),
           "PUT"
         );
+        return true;
       })
       .catch((err) => {
         console.warn(err);
@@ -230,63 +235,3 @@ export default class GApiUtils {
     };
   }
 }
-
-// async deleteCalendars(calIds) {
-//   this.apiState = API_STATES.WAITING;
-//   sendMessage({ nextPage: Pages.LOADING });
-//   const init = { ...globalInit, method: "DELETE" };
-//   const results = await Promise.allSettled(
-//     calIds.map((id) =>
-//       fetch(`https://www.googleapis.com/calendar/v3/calendars/${id}`, init)
-//         .then((res) => {
-//           // console.log(res.status);
-//           return { id, status: res.status };
-//         })
-//         .catch((err) => {
-//           console.log(err);
-//           return { id, error: err };
-//         })
-//     )
-//   );
-
-//   // console.log(results);
-
-//   const failed = [];
-//   const succeeded = [];
-
-//   for (const result of results) {
-//     if (result.status === "fulfilled") {
-//       if (
-//         result.value.status == 200 ||
-//         result.value.status == 204 ||
-//         result.value.status == 404
-//       ) {
-//         succeeded.push(result.value.id);
-//       } else {
-//         failed.push(result.value.id);
-//       }
-//     } else {
-//       failed.push(result.reason?.id ?? "Unknown");
-//     }
-//   }
-
-//   if (succeeded.length > 0) {
-//     chrome.storage.sync.remove("WFT-Scheduler Calendar ID");
-//     // console.log("Successfully removed calendars:", succeeded);
-//     apiState = API_STATES.SUCCESS;
-//     if (fetchedJsons.userDetails?.firstName) {
-//       sendMessage({ nextPage: Pages.INSTRUCTIONS });
-//     } else {
-//       sendMessage({ nextPage: Pages.FORM });
-//     }
-//   } else if (failed.length > 0) {
-//     // console.log(`failed: ${failed}\nsucceeded: ${succeeded}\nresults: ${results}`)
-//     apiState = API_STATES.FAILED;
-//     sendMessage({ nextPage: Pages.INSTRUCTIONS });
-//     console.warn("Failed to remove calendars:", failed);
-//   }
-
-//   // else {
-//   //   apiState = API_STATES.IDLE;
-//   // }
-// }

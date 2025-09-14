@@ -1,5 +1,6 @@
 export const TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+// REMOVABLE?
 export const defaultReminder = [
   {
     method: "popup",
@@ -7,6 +8,7 @@ export const defaultReminder = [
   },
 ];
 
+//rename to sm like homedepotApiRegexp
 export const regexp = {
   wftURL: /https:\/\/wft.homedepot.com\/*/,
   summaryRegExp:
@@ -17,6 +19,8 @@ export const regexp = {
     /https:\/\/wft.homedepot.com\/missioncontrol\/v1\/timecards\/([0-9]+)\/weekly*/,
   userDetailsRegExp: /https:\/\/wft.homedepot.com\/missioncontrol\/v1\/user\/details*/,
 };
+// Regex to validate gmail/googlemail
+export const emailRegex = /^[a-zA-Z0-9._%+~-]+@(gmail\.com|googlemail\.com)$/;
 
 export const AUTH_STATES = {
   UNAUTHENTICATED: "unauthenticated",
