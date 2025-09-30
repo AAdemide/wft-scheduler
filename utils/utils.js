@@ -15,6 +15,7 @@ const isPreviousDay = (day) => {
 export const parseDays = (days, location, timezone) => {
   let events = [];
   for (let day of Object.values(days)) {
+    // console.log(day, days)
     if (isPreviousDay(day.start.slice(0, -1))) {
       continue;
     }
@@ -88,7 +89,7 @@ function toIsoInTimeZone(utcString, timeZone) {
   s;
 }
 
-export function parseDiff(calEvents, fetchedJson, timezone) {
+export function parseDiff(calEvents, fetchedDays, timezone) {
   let events = {
     POST: [],
     DELETE: [],
@@ -106,33 +107,28 @@ export function parseDiff(calEvents, fetchedJson, timezone) {
     calEventsItems[key] = val;
   });
 
-  const { days } = fetchedJson;
-  for (const day in days) {
-    const newDay = days[day];
-    days[day] = parseDays({ [day]: newDay })[0];
+
+  for (const day in fetchedDays) {
+    const newDay = fetchedDays[day];
+    fetchedDays[day] = parseDays({ [day]: newDay })[0];
   }
 
   const allKeys = new Set(
-    [...Object.keys(days), ...Object.keys(calEventsItems)].filter((k) => {
+    [...Object.keys(fetchedDays), ...Object.keys(calEventsItems)].filter((k) => {
       return !isPreviousDay(k.slice(0, -1));
     })
   );
 
   allKeys.forEach((d) => {
-    const updated = days[d];
+    const updated = fetchedDays[d];
     const current = calEventsItems[d];
     if (updated && !current) {
       events["POST"].push(updated);
-    } else if (
-      !updated &&
-      current
-      || events["DELETE"].length == 0
-    ) {
+    } else if (!updated && current) {
       events["DELETE"].push(current.eventId);
     } else if (
       updated.start.dateTime + "Z" !== current.start ||
       updated.end.dateTime + "Z" !== current.end
-      || events["PUT"].length == 0
     ) {
       events["PUT"].push({
         payload: { ...updated, location: current.location },

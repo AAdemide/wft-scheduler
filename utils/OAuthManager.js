@@ -4,19 +4,27 @@ export default class OAuthManager {
       client_id: chrome.runtime.getManifest().oauth2.client_id,
       redirect_uri: chrome.identity.getRedirectURL(),
       response_type: "token",
-      scope: "https://www.googleapis.com/auth/calendar",
+      scope: "https://www.googleapis.com/auth/calendar openid email profile",
     };
   }
-  getOAuthURL(promptConsent = false) {
+  async getOAuthURL() {
     let url;
-    // if (promptConsent)
-    //   url = new URLSearchParams(
-    //     Object.entries({ ...this.auth_params, prompt: "consent" })
-    //   );
-    // else {
-    url = new URLSearchParams(Object.entries(this.auth_params));
-    //}
-    return "https://accounts.google.com/o/oauth2/auth?" + url.toString();
+    const options = { ...this.auth_params };
+    try {
+      const selectAccount = (
+        await chrome.storage.session.get("wft-scheduler-oauth-prompt")
+      )["wft-scheduler-oauth-prompt"];
+
+      if (!selectAccount) {
+        options.prompt = "select_account";
+        // chrome.storage.session.set({"wft-scheduler-oauth-prompt": "account_selected"});
+      }
+
+      url = new URLSearchParams(Object.entries(options));
+      return `https://accounts.google.com/o/oauth2/auth?${url.toString()}`;
+    } catch (error) {
+      console.log(error);
+    }
   }
 
   storeTokenWithExpiry(token, tokenType, expiresIn) {
@@ -24,48 +32,50 @@ export default class OAuthManager {
       sukunaFragment: {
         token,
         tokenType,
-        expiresIn: Date.now() + expiresIn * 1000,
+        expiresIn: expiresIn,
       },
     });
   }
 
   async getOAuthToken(authFlowOptions) {
     const { sukunaFragment } = await chrome.storage.local.get("sukunaFragment");
-    const { expiresIn, ...rest } = sukunaFragment;
 
-    if (expiresIn > Date.now()) {
-      this.expiresIn = expiresIn;
-      return rest;
+    if (sukunaFragment?.expiresIn > Date.now()) {
+      this.expiresIn = sukunaFragment.expiresIn;
+      return sukunaFragment;
+    } else {
+      console.log("poop")
     }
 
-    console.log(
-      "token expired, last token timestamp:",
-      sukunaFragment.expiresIn
-    );
     return new Promise((resolve, reject) => {
-      chrome.identity.launchWebAuthFlow(authFlowOptions, (responseUrl) => {
-        if (chrome.runtime.lastError || !responseUrl) {
-          const error =
-            chrome.runtime.lastError?.message || "Authorization failed";
-          return reject(error);
+      chrome.identity.launchWebAuthFlow(
+        authFlowOptions,
+        async (responseUrl) => {
+          if (chrome.runtime.lastError || !responseUrl) {
+            const error =
+              chrome.runtime.lastError?.message || "Authorization failed";
+            return reject(error);
+          }
+
+          const resUrl = new URL(responseUrl);
+          const params = new URLSearchParams(resUrl.hash.substring(1));
+          const token = params.get("access_token");
+          const tokenType = params.get("token_type");
+          const expiresInMillis = (parseInt(params.get("expires_in"), 10) * 1000);
+          console.log(expiresInMillis)
+          const expiresIn = Date.now() + expiresInMillis;
+          console.log(expiresIn)
+
+          // await callback(tokenType, token, expiresIn);
+
+          if (params.get("error")) return reject(params.get("error"));
+          return resolve({
+            token,
+            tokenType,
+            expiresIn,
+          });
         }
-
-        const resUrl = new URL(responseUrl);
-        const params = new URLSearchParams(resUrl.hash.substring(1));
-        const token = params.get("access_token");
-        const tokenType = params.get("token_type");
-        const expiresIn = parseInt(params.get("expires_in"), 10)
-        //  - 60000 * 5;
-        this.expiresIn = expiresIn;
-
-        this.storeTokenWithExpiry(token, tokenType, expiresIn);
-
-        if (params.get("error")) return reject(params.get("error"));
-        resolve({
-          token,
-          tokenType
-        });
-      });
+      );
     });
   }
 
@@ -78,10 +88,9 @@ export default class OAuthManager {
   }
 
   async getTokenValid(expiresIn) {
-    if(!expiresIn) {
-        expiresIn = this.expiresIn ?? await this.getExpiryTimestamp();
+    if (!expiresIn) {
+      expiresIn = this.expiresIn ?? (await this.getExpiryTimestamp());
     }
-    return Date.now() < expiresIn;
+    return Date.now() <= expiresIn - 60000 * 5;
   }
-
 }

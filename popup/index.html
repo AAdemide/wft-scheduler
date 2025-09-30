@@ -9,7 +9,8 @@
   </head>
   <body>
     <div id="instruction-page" class="hidden page">
-      <div id="cursor-orb"></div> <!-- glowing orb -->
+      <div id="cursor-orb"></div>
+      <!-- glowing orb -->
       <h1>Please log in</h1>
       <p>
         Go to
@@ -74,10 +75,10 @@
         >
           Update
         </button>
-        <p id="calendar-updated" class="success-confirmation hidden">
+        <p id="update-cal-success" class="success-confirmation hidden">
           Calendar has been updated
         </p>
-        <p id="calendar-up-to-date" class="neutral-text hidden">
+        <p id="cal-up-to-date" class="neutral-text hidden">
           Calendar is already up to date
         </p>
       </div>
@@ -125,6 +126,14 @@
       I have failed sorry. Please try again, I don't know what went wrong so try
       everything again.
     </div>
+
+    <dialog close>
+      <p></p>
+
+      <form method="dialog">
+        <button>Close</button>
+      </form>
+    </dialog>
 
     <script src="popup.js" type="module"></script>
   </body>

@@ -1,5 +1,6 @@
 * {
   margin: 0;
+  padding: 0;
   box-sizing: border-box;
 }
 
@@ -29,47 +30,49 @@ select {
   display: block;
   /* margin-top: 0.35rem; */
 }
-/* 
-.cta-button {
-  background-color: transparent;
-  border: 2px solid white;
-  color: #ff3d00;
-  font-size: 0.9rem;
-  font-weight: 600;
-  display: inline flex;
-  width: 80%;
-  justify-content: center;
-  align-items: center;
-  border-radius: 0.25rem;
-  padding: 0.3rem 0.5rem;
-  word-break: keep-all;
-  cursor: pointer;
-  position: relative;
-  transition: all 0.5s ease-in-out;
-  user-select: none;
-}
-.cta-button:enabled:hover {
-  background-color: white;
-  box-shadow: 0 0 7px 2px rgba(255, 255, 255, 0.7);
-}
-.cta-button:disabled {
-  border: none;
-}
-.cta-button:disabled:after {
-  content: "";
+
+dialog::backdrop {
   position: absolute;
-  width: 100%;
-  height: 100%;
   top: 0;
   left: 0;
-  background-color: rgba(128, 128, 128, 0.556);
-  border-radius: 0.25rem;
-  border: 2px solid rgba(128, 128, 128, 0.556);
-  cursor: not-allowed;
+  z-index: 9;
+  width: 100vw;
+  height: 100vh;
+  /* From https://css.glass */
+  background: rgba(255, 255, 255, 0.17);
+  /* border-radius: 16px; */
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(6.6px);
+  -webkit-backdrop-filter: blur(6.6px);
 }
-button:disabled > img::before {
-  background-color: gray;
-} */
+
+dialog {
+  border: none;
+  position: relative;
+  margin: auto;
+  z-index: 10;
+  height: fit-content;
+  width: 90%;
+  padding: 1rem;
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: .3rem;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(0px);
+}
+
+dialog button {
+  margin-top: .55rem;
+  display: block;
+  margin-left: auto;
+  padding: .35rem 0;
+  width: 35%;
+  color: white;
+  border: none;
+  border-radius: .2rem;
+  background-color: #1a1a1a;
+}
 
 .hidden {
   display: none !important;
@@ -91,16 +94,16 @@ button:disabled > img::before {
 
 .button {
   display: inline-block;
-  padding: .75rem 0;
+  padding: 0.75rem 0;
   background-color: transparent;
-  border-radius: .5rem;
+  border-radius: 0.5rem;
 }
 
 .button:enabled:hover {
   cursor: pointer;
 }
 
-.button:disabled  {
+.button:disabled {
   border: 2px solid gray !important;
   color: gray !important;
 }
@@ -132,12 +135,12 @@ button:disabled > img::before {
 }
 
 #update-calendar {
-  border: 2px solid #008CBA;
-  color: #008CBA;
-} 
+  border: 2px solid #008cba;
+  color: #008cba;
+}
 
 #update-calendar:enabled:hover {
-  background-color: #008CBA;
+  background-color: #008cba;
   color: white;
 }
 
@@ -146,7 +149,7 @@ button:disabled > img::before {
   flex-direction: column;
   width: 100%;
   justify-content: space-around;
-  gap: .75rem 0;
+  gap: 0.75rem 0;
 }
 
 #button-group > p {
@@ -154,13 +157,13 @@ button:disabled > img::before {
 }
 
 #share-input-group {
-  border-radius: .5rem;
+  border-radius: 0.5rem;
   overflow: clip;
   border: 2px solid white;
   height: 2.5rem;
 }
 
-#share-input-group:has( > #share-button:disabled) {
+#share-input-group:has(> #share-button:disabled) {
   border-color: gray;
 }
 
@@ -170,7 +173,7 @@ button:disabled > img::before {
   background-color: transparent;
   color: white;
   height: 100%;
-  padding-left: .5rem;
+  padding-left: 0.5rem;
 }
 
 #share-button {
@@ -187,12 +190,12 @@ button:disabled > img::before {
 }
 
 #share-button > svg {
-  width: 100%;
+  width: 70%;
   height: auto;
   fill: white;
   transition: all 0.1s ease-in-out;
   vertical-align: middle;
-  margin-top: .15rem;
+  margin-top: 0.15rem;
 }
 
 #share-button:enabled:hover > svg {
@@ -205,18 +208,18 @@ button:disabled > img::before {
   border-color: gray;
 }
 
-#share-button:disabled > svg > path{
+#share-button:disabled > svg > path {
   fill: rgb(68, 68, 68);
 }
 
-#share-cal-success, #share-cal-failed {
-  margin-top: .5rem;
+#share-cal-success,
+#share-cal-failed {
+  margin-top: 0.5rem;
 }
-
 
 #instruction-page {
   padding: 1rem;
-  gap: .5rem;
+  gap: 0.5rem;
   position: relative;
   overflow: hidden;
   justify-content: center;
@@ -226,7 +229,7 @@ button:disabled > img::before {
 
 #cursor-orb {
   border: 2px solid green;
-    position: absolute;
+  position: absolute;
   width: 200px;
   height: 200px;
   border-radius: 50%;
@@ -258,7 +261,7 @@ button:disabled > img::before {
 #refresh-time-elapsed-container {
   margin: -0.5rem 0;
   width: 75%;
-  font-size: .8rem;
+  font-size: 0.8rem;
 }
 
 #share-cal {
@@ -266,30 +269,30 @@ button:disabled > img::before {
   text-align: start;
   justify-content: flex-start;
   flex-direction: column;
-  gap: .25rem;
+  gap: 0.25rem;
 }
 
-#share-cal > div { 
+#share-cal > div {
   color: #ff3d00;
   display: flex;
 }
 
 #share-cal > label {
   font-size: 1.15rem;
-  margin-bottom: .5rem;
+  margin-bottom: 0.5rem;
 }
 
 #form-page {
   gap: 1rem;
-  padding: 0.5rem .75rem;
+  padding: 0.5rem 0.75rem;
   justify-content: center;
   align-items: flex-start;
-  font-size: .9rem;
+  font-size: 0.9rem;
 
   label {
     display: flex;
     flex-direction: column;
-    gap: .3rem;
+    gap: 0.3rem;
   }
 
   .form__inner {
@@ -310,8 +313,8 @@ button:disabled > img::before {
     color: #1a1a1a;
     font-weight: bold;
     border: none;
-    border-radius: .35rem;
-    padding: .5rem 0;
+    border-radius: 0.35rem;
+    padding: 0.5rem 0;
     font-size: 1rem;
     width: 100%;
     display: flex;
@@ -319,14 +322,15 @@ button:disabled > img::before {
     justify-content: center;
   }
 
-  select, input {
+  select,
+  input {
     outline: none;
-    border-radius: .3rem;
+    border-radius: 0.3rem;
     border: 2px solid white;
     background-color: #1a1a1a;
     color: white;
     /* height: .5rem; */
-    padding: .25rem;
+    padding: 0.25rem;
   }
 }
 

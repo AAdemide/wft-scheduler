@@ -18,7 +18,10 @@ export default class PopupPOM {
     this.shareCalFailed = document.querySelector("#share-cal-failed");
     this.emailErr = document.querySelector("#email-error");
     this.orb = document.getElementById("cursor-orb");
-
+    this.updateCalSuccess = document.querySelector("#update-cal-success");
+    this.calUpToDate = document.querySelector("#cal-up-to-date");
+    this.modal = document.querySelector("dialog");
+    this.modalMessageText = document.querySelector("dialog > p");
     this.eventListenerSetup(calId, sendMessage);
   }
 
@@ -42,20 +45,21 @@ export default class PopupPOM {
           shareButtonClicked: {
             calId,
             email: event.target[0].value,
-          },
+          }
         });
         event.target[0].value = "";
         event.target[1].disabled = true;
       });
 
       this.updateButton.addEventListener("click", () => {
+        this.updateButton.disabled = true;
         sendMessage({
           updateButtonClicked: { calId },
         });
       });
     }
 
-    this.shareInput.addEventListener("input", function () {
+    this.shareInput.addEventListener("input",  () => {
       const value = this.shareInput.value.trim();
 
       const isValidEmail = emailRegex.test(value);
@@ -83,7 +87,7 @@ export default class PopupPOM {
   async setRefreshTimeElapsed() {
     const res = await chrome.storage.sync.get("refreshTimeElapsed");
     const pastTime = moment(res.refreshTimeElapsed);
-    const duration = moment.duration(-1, moment().diff(pastTime));
+    const duration = moment.duration(moment().diff(pastTime));
     this.refreshTimeElapsed.innerText = duration.humanize();
   }
 
@@ -123,11 +127,30 @@ export default class PopupPOM {
     }
   }
 
+  flashMessage(element) {
+    element.classList.toggle("hidden");
+    setTimeout(() => {
+      element.classList.toggle("hidden");
+    }, 5000);
+  }
+
   getFormData() {
     const formData = {};
     for (let [key, value] of new FormData(this.form)) {
       formData[key] = value;
     }
     return formData;
+  }
+
+  setModalMessage(modalMessage) {
+    this.modalMessageText.innerText = modalMessage;
+  }
+
+  modalOpen() {
+    this.modal.showModal();
+  }
+  
+  modalClose() {
+    this.modal.close();
   }
 }

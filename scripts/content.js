@@ -1,6 +1,6 @@
 window.onload = () => {
-  console.log(window.location.href);
-  //send wake up message to background script
+    chrome.runtime.sendMessage({ type: "wake-up", origin: "content-script" }, (_res) => {
 
-  document.querySelector('body').style.filter = "invert(100%)";
+    });
 }
+

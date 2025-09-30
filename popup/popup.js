@@ -2,7 +2,6 @@ import {
   API_STATES,
   Pages,
   THD_AUTH_STATES,
-  emailRegex,
 } from "../utils/constants.js";
 import PopupPOM from "../utils/popupPOM.js";
 
@@ -16,30 +15,33 @@ async function getCalId() {
 }
 
 function sendMessage(message) {
-  if (port) {
+  try {  
     port.postMessage(message);
     return;
+  } catch (error) {
+    console.warn("Port send failed", port);
+    chrome.runtime.sendMessage({ type: "wake-up", origin: "popup" }, (response) => {
+      port = chrome.runtime.connect({ name: "wftSchedulerEventLoop" });
+      port.onMessage.addListener(handleMessage);
+      port.onDisconnect.addListener(() => {
+        port = null;
+      });
+      port.postMessage(message);
+    });
   }
 
-  chrome.runtime.sendMessage({ type: "wake-up" }, (response) => {
-    console.log(response);
-    port = chrome.runtime.connect({ name: "wftSchedulerEventLoop" });
-    port.onMessage.addListener(handleMessage);
-    port.onDisconnect.addListener(() => {
-      port = null;
-    });
-    port.postMessage(message);
-  });
 }
 
 function handleMessage(message, _sender) {
-  // console.log(message);
+  console.log(message)
   const {
     fetchedJsons,
     nextPage,
     updateRefresh,
     shareButtonHandled,
     updateButtonClicked,
+    openModal,
+    modalMessage
   } = message;
 
   if (fetchedJsons == THD_AUTH_STATES.AUTH_SUCCESS && !calId) {
@@ -51,21 +53,18 @@ function handleMessage(message, _sender) {
   } else if (fetchedJsons == THD_AUTH_STATES.AUTH_FAILED && !calId) {
     pom.changePage(Pages.INSTRUCTIONS);
   } else if (updateRefresh) {
-    setRefreshTimeElapsed();
+    pom.setRefreshTimeElapsed();
   } else if (shareButtonHandled == API_STATES.SUCCESS) {
-    pom.shareCalSuccess.classList.toggle("hidden");
-    setTimeout(() => {
-      pom.shareCalSuccess.classList.toggle("hidden");
-    }, 5000);
+    pom.flashMessage(pom.shareCalSuccess);
   } else if (shareButtonHandled == API_STATES.FAILED) {
-    pom.shareCalFailed.classList.toggle("hidden");
-    setTimeout(() => {
-      pom.shareCalFailed.classList.toggle("hidden");
-    }, 5000);
+    pom.flashMessage(pom.shareCalFailed);
   } else if (updateButtonClicked == API_STATES.SUCCESS) {
-    console.log("updates where made");
+    pom.flashMessage(pom.updateCalSuccess);
   } else if (updateButtonClicked == API_STATES.FAILED) {
-    console.log("your calendar is already up to date");
+    pom.flashMessage(pom.calUpToDate);
+  } else if (openModal) {
+    pom.setModalMessage(modalMessage);
+    pom.modalOpen();
   }
   if (nextPage) {
     pom.changePage(nextPage);
@@ -76,10 +75,13 @@ window.onload = async function () {
   calId = await getCalId();
   pom = new PopupPOM(calId, sendMessage);
   pom.setRefreshTimeElapsed();
+  pom.modalClose();
 
-  chrome.runtime.sendMessage({ type: "wake-up" }, (_res) => {
+  chrome.runtime.sendMessage({ type: "wake-up", origin: "popup" }, (_res) => {
     port = chrome.runtime.connect({ name: "wftSchedulerEventLoop" });
     port.onMessage.addListener(handleMessage);
+    port.onDisconnect.addListener(() => {
+      pom.updateButton.disabled = true;
+    });
   });
-
 };

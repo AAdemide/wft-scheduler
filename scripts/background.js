@@ -7,11 +7,9 @@ Object.assign(self, utils);
 import GApiUtils from "../utils/gApiUtils.js";
 import OAuthManager from "../utils/OAuthManager.js";
 
-try {
   let port;
   let thdAuthState = THD_AUTH_STATES.IDLE;
   let authState = AUTH_STATES.UNAUTHENTICATED;
-  let apiState = API_STATES.IDLE;
   let lastReceivedHeaderTimer;
   let fetchedJsons = {};
   const gapi = new GApiUtils();
@@ -24,7 +22,7 @@ try {
     detailsMatch: (url) => regexp.detailsRegExp.test(url),
     userDetailsMatch: (url) => regexp.userDetailsRegExp.test(url),
 
-    async gottenAllUrls() {
+    gottenAllUrls() {
       const result = this.details !== "" && this.userDetails !== "";
 
       if (result) {
@@ -34,13 +32,6 @@ try {
             userDetails: this.userDetails,
           },
         });
-      } else {
-        const myUrls = await chrome.storage.session.get("urls");
-        if (myUrls?.urls?.details) {
-          this.details = myUrls.urls.details;
-          this.userDetails = myUrls.urls.userDetails;
-          return true;
-        }
       }
       return result;
     },
@@ -51,17 +42,21 @@ try {
     },
   };
 
-  function userDataFetched() {
-    return fetchedJsons.userDetails?.firstName;
+  async function getUrlsFromStorage() {
+    const myUrls = await chrome.storage.session.get("urls");
+    if (myUrls?.urls?.details) {
+      urls.details = myUrls.urls.details;
+      urls.userDetails = myUrls.urls.userDetails;
+    }
   }
 
-  function updateAuthState(state, message) {
-    thdAuthState = state;
-    sendMessage(message);
+  getUrlsFromStorage();
+
+  function userDataFetched() {
+    return !!fetchedJsons.userDetails?.firstName;
   }
 
   async function fetchAllJson() {
-    console.log(urls.details, urls.userDetails);
     const results = await Promise.all([
       fetch(urls.details),
       fetch(urls.userDetails),
@@ -80,98 +75,114 @@ try {
   }
   // checks if workforce has been authenticated, if so get the user data
   async function fetchUserData(fromHeaderCallback) {
-    // since the background script is polled only run the function if the authentication has begun.
-    // if (thdAuthState == THD_AUTH_STATES.AUTHENTICATING) return;
-    try {
-      if (userDataFetched()) {
-        updateAuthState(THD_AUTH_STATES.AUTH_SUCCESS, {
-          fetchedJsons: THD_AUTH_STATES.AUTH_SUCCESS,
-        });
-        return true;
-      }
-      updateAuthState(THD_AUTH_STATES.AUTHENTICATING, {
-        fetchedJsons: THD_AUTH_STATES.AUTHENTICATING,
-      });
+    console.log(url)
+    thdAuthState = constants.THD_AUTH_STATES.AUTHENTICATING;
+    const headerTimeout = Date.now() - lastReceivedHeaderTimer > 5000;
 
-      const urlsReady = await urls.gottenAllUrls();
-      const headerTimeout = Date.now() - lastReceivedHeaderTimer > 5000;
-
-      if (urlsReady) {
-        const [details, userDetails] = await fetchAllJson([
-          fetch(urls.details),
-          fetch(urls.userDetails),
-        ]);
-
-        if (!details || !userDetails) {
-          updateAuthState(THD_AUTH_STATES.AUTH_FAILED, {
-            fetchedJsons: THD_AUTH_STATES.AUTH_FAILED,
-          });
-          return false;
-        }
-
-        fetchedJsons = {
-          details,
-          userDetails,
-        };
-        updateAuthState(THD_AUTH_STATES.AUTH_SUCCESS, {
-          fetchedJsons: THD_AUTH_STATES.AUTH_SUCCESS,
-        });
-        return true;
-      }
-
-      if (!fromHeaderCallback || headerTimeout) {
-        updateAuthState(THD_AUTH_STATES.AUTH_FAILED, {
-          fetchedJsons: THD_AUTH_STATES.AUTH_FAILED,
-        });
-        return false;
-      }
-    } catch (err) {
-      updateAuthState(THD_AUTH_STATES.AUTH_FAILED, {
-        nextPage: Pages.INSTRUCTIONS,
-      });
-      urls.clearAllUrls();
-      console.warn(err);
+    if (fromHeaderCallback && headerTimeout) {
+      thdAuthState = constants.THD_AUTH_STATES.FAILED;
       return false;
     }
-    return false;
+
+    const [details, userDetails] = await fetchAllJson([
+      fetch(urls.details),
+      fetch(urls.userDetails),
+    ]);
+
+    if (!details || !userDetails) {
+      thdAuthState = constants.THD_AUTH_STATES.AUTH_FAILED;
+      return false;
+    }
+
+    fetchedJsons = {
+      details,
+      userDetails,
+    };
+    thdAuthState = constants.THD_AUTH_STATES.AUTH_SUCCESS;
+    return true;
   }
 
   async function authenticate() {
-    // if(this.authState == AUTH_STATES.AUTHENTICATING) {
-    //     return;
-    // }
+    if (authState == AUTH_STATES.AUTHENTICATING) {
+      return;
+    }
     authState = AUTH_STATES.AUTHENTICATING;
     try {
-      const promptConsent =
-        (authState == AUTH_STATES.AUTH_FAILED ||
-          authState == AUTH_STATES.AUTHENTICATING) ??
-        false;
       const authFlowOptions = {
-        url: oauthManager.getOAuthURL(promptConsent),
+        url: await oauthManager.getOAuthURL(),
         interactive: true,
       };
-      const { token, tokenType } = await oauthManager.getOAuthToken(
+
+      //I can pass in current email here
+      const { tokenType, token, expiresIn } = (await oauthManager.getOAuthToken(
         authFlowOptions
-      );
+      )) || {};
+
+      const calUserEmail = (await chrome.storage.sync.get(
+        "WFT-Scheduler Calendar userEmail"
+      ))["WFT-Scheduler Calendar userEmail"];
+
+      const userEmail =
+        (await gapi.fetchUserEmail({
+          headers: {
+            Authorization: `${tokenType} ${token}`,
+          },
+        })) || {};
+      if (typeof calUserEmail == "string" && calUserEmail != userEmail) {
+        console.log("failed")
+        authState = AUTH_STATES.AUTH_FAILED;
+        return {
+          authenticateSuccess: false,
+          modalMessage: `You have signed in with the wrong email, please use ${calUserEmail}`,
+        };
+      }
+      oauthManager.expiresIn = expiresIn;
+      oauthManager.storeTokenWithExpiry(token, tokenType, expiresIn);
       gapi.setAuthorizationHeader(tokenType, token);
       authState = AUTH_STATES.AUTH_SUCCESS;
+      console.log("success");
+      return { authenticateSuccess: true };
     } catch (error) {
-      console.error("OAuth error:", error);
+      console.warn("OAuth error:", error);
       authState = AUTH_STATES.AUTH_FAILED;
+      return {
+        authenticateSuccess: false,
+        modalMessage:
+          "There was an error in the authentication of your google account please try again",
+      };
     }
   }
 
-  const onHeadersReceivedCallback = async (details) => {
+  const onHeadersReceivedCallback = ({ url }) => {
+    console.log(url)
     lastReceivedHeaderTimer = Date.now();
-    const currUrl = details.url;
-
     //BUG: error in console when wft logs out url start from identity.homedepot.com/idp [exact redirect url: https://identity.homedepot.com/idp/DRON2_2tHsN/resume/idp/startSLO.ping]
 
-    fetchUserData(true);
+    if (
+      thdAuthState == constants.THD_AUTH_STATES.IDLE &&
+      !userDataFetched() &&
+      urls.gottenAllUrls()
+    ) {
+      sendMessage({
+        fetchedJsons: THD_AUTH_STATES.AUTHENTICATING,
+      });
+      fetchUserData(true).then(() => {
+        if (thdAuthState === THD_AUTH_STATES.AUTH_SUCCESS) {
+          sendMessage({
+            fetchedJsons: THD_AUTH_STATES.AUTH_SUCCESS,
+          });
+        } else if (thdAuthState === THD_AUTH_STATES.AUTH_FAILED) {
+          sendMessage({
+            fetchedJsons: THD_AUTH_STATES.AUTH_FAILED,
+          });
+        }
+        thdAuthState = constants.THD_AUTH_STATES.IDLE;
+      });
+    }
 
-    if (urls.detailsMatch(currUrl)) urls.details = currUrl;
-    else if (urls.userDetailsMatch(currUrl)) {
-      urls.userDetails = currUrl;
+    if (urls.detailsMatch(url)) urls.details = url;
+    else if (urls.userDetailsMatch(url)) {
+      urls.userDetails = url;
     }
     chrome.storage.sync.set({ refreshTimeElapsed: Date.now() });
     sendMessage({ updateRefresh: true });
@@ -182,15 +193,51 @@ try {
     filter,
     []
   );
+
   const onMessageCallback = (_req, _, sendResponse) => {
     sendResponse({ awake: true });
     chrome.runtime.onConnect.addListener(async (p) => {
       port = p;
       port.onMessage.addListener(handleMessage);
-      // first thing's first check if google api has been authenticated
-      authenticate();
-      fetchUserData();
+
+      try {
+              await getUrlsFromStorage();
+
+      if (userDataFetched() && urls.gottenAllUrls()) {
+        sendMessage({
+          fetchedJsons: THD_AUTH_STATES.AUTH_SUCCESS,
+        });
+      } else if (!userDataFetched() && urls.gottenAllUrls()) {
+        sendMessage({ fetchedJsons: THD_AUTH_STATES.AUTHENTICATING });
+        const fetchUserDataSuccess = await fetchUserData();
+
+        if (fetchUserDataSuccess) {
+          sendMessage({
+            fetchedJsons: THD_AUTH_STATES.AUTH_SUCCESS,
+          });
+        } else {
+          sendMessage({
+            fetchedJsons: THD_AUTH_STATES.AUTH_FAILED,
+          });
+        }
+      } else {
+        console.log(urls)
+        sendMessage({
+          fetchedJsons: THD_AUTH_STATES.AUTH_FAILED,
+        });
+      }
+
+      const { authenticateSuccess, modalMessage } =
+        (await authenticate()) || {};
+      if (authenticateSuccess == false) {
+        sendMessage({ openModal: true, modalMessage });
+      }
       return true;
+      } catch (error) {
+        console.log(error)
+      }
+
+
     });
   };
   chrome.runtime.onMessage.addListener(onMessageCallback);
@@ -199,7 +246,6 @@ try {
     const genericHandler = async (event) => {
       const actions = {
         addEvents: async () => {
-          apiState = API_STATES.WAITING;
           sendMessage({ nextPage: Pages.LOADING });
 
           const body = {
@@ -209,9 +255,14 @@ try {
             description: "A calendar of your work schedule at The Home Depot",
           };
           try {
+            const userEmail = await gapi.fetchUserEmail();
+            console.log(userEmail)
+            // set email of user too
             chrome.storage.sync.set({
-              "WFT-Scheduler Calendar ID": await gapi.makeCalendar(body),
+              "WFT-Scheduler Calendar userEmail": userEmail,
             });
+            chrome.storage.sync.set({
+              "WFT-Scheduler Calendar ID": await gapi.makeCalendar(body)});
             const calOptions = {
               id: gapi.getCalId(),
               backgroundColor: "#F96302",
@@ -227,52 +278,45 @@ try {
             gapi.addToCalendarList(calOptions);
           } catch (error) {
             console.warn(error);
-            apiState = API_STATES.FAILED;
             sendMessage({ nextPage: Pages.INSTRUCTIONS });
           }
           const addEventSuccess = await gapi.addEventsToCalendar(
             parseDays(
-              fetchedJsons.details.days,
-              message.formData.location,
+              JSON.parse(JSON.stringify(fetchedJsons.details.days)),
+              message.formData.location
               // fetchedJsons.userDetails.timeZoneCode
             )
           );
 
           console.log(addEventSuccess);
           if (addEventSuccess) {
-            apiState = API_STATES.SUCCESS;
             sendMessage({
               nextPage: Pages.CALENDAR,
               fetchedJsons: userDataFetched(),
             });
           } else {
-            apiState = API_STATES.FAILED;
             sendMessage({ nextPage: Pages.INSTRUCTIONS });
           }
         },
         delCal: async () => {
-          console.log("delete button clicked");
-          apiState = API_STATES.WAITING;
           sendMessage({ nextPage: Pages.LOADING });
           if (!gapi.getCalId()) {
             gapi.setCalId(message.calId);
           }
           const deleteCalendarSuccess = await gapi.deleteCalendar();
           if (deleteCalendarSuccess) {
-            apiState = API_STATES.SUCCESS;
             chrome.storage.sync.remove("WFT-Scheduler Calendar ID");
+            chrome.storage.sync.remove("WFT-Scheduler Calendar userEmail");
             if (userDataFetched()) {
               sendMessage({ nextPage: Pages.FORM });
             } else {
               sendMessage({ nextPage: Pages.INSTRUCTIONS });
             }
           } else {
-            apiState = API_STATES.FAILED;
-            sendMessage({ nextPage: Pages.INSTRUCTIONS });
+            sendMessage({ openModal: true, modalMessage: "Delete Failed" });
           }
         },
         shareButtonClicked: async () => {
-          this.apiState = API_STATES.WAITING;
           sendMessage({ shareButtonHandled: API_STATES.WAITING });
           gapi.setCalId(message.shareButtonClicked.calId);
           const shareCalendarSuccess = await gapi.shareCalendar(
@@ -286,26 +330,31 @@ try {
           }
         },
         updateButtonClicked: async () => {
-          this.apiState = API_STATES.WAITING;
           sendMessage({ updateButtonClicked: API_STATES.WAITING });
           if (!gapi.getCalId()) {
             gapi.setCalId(message.updateButtonClicked.calId);
           }
-          console.log(fetchedJsons.userDetails);
-          const updateCalendarSuccess = await gapi.updateCalendar(fetchedJsons.details);
+          const updateCalendarSuccess = await gapi.updateCalendar(
+            JSON.parse(JSON.stringify(fetchedJsons.details.days))
+          );
+          // fetchedJsons = {}
 
-          if(updateCalendarSuccess) {
+          if (updateCalendarSuccess) {
             sendMessage({ updateButtonClicked: API_STATES.SUCCESS });
-          } else  {
+          } else {
             sendMessage({ updateButtonClicked: API_STATES.FAILED });
           }
         },
       };
 
-      // console.log(oauthManager.getTimerTokenValid())
       const tokenValid = await oauthManager.getTokenValid();
       if (!tokenValid) {
-        await authenticate();
+        const { authenticateSuccess, modalMessage } =
+          (await authenticate()) || {};
+
+        if (authenticateSuccess == false) {
+          sendMessage({ openModal: true, modalMessage });
+        }
       }
       try {
         actions[event]();
@@ -315,17 +364,12 @@ try {
     };
 
     const handlers = {
-      makeIdle: () => (apiState = API_STATES.IDLE),
       addEvents: () => genericHandler("addEvents"),
       delCal: () => genericHandler("delCal"),
       shareButtonClicked: () => genericHandler("shareButtonClicked"),
       updateButtonClicked: () => genericHandler("updateButtonClicked"),
     };
-    // const {questionReady} = message;
-    //handle questionReady
     const reqKeys = Object.keys(message);
-
-    // if there are valid handler functions call them and return the function
     reqKeys.forEach((reqKey) => {
       if (handlers[reqKey]) {
         handlers[reqKey]();
@@ -337,9 +381,6 @@ try {
       port.postMessage(message);
       return;
     } catch (error) {
-      console.warn("Port send failed", port);
+      // console.log("popup not open");
     }
   }
-} catch (e) {
-  console.warn(e);
-}

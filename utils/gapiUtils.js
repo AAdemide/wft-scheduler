@@ -17,6 +17,25 @@ export default class GApiUtils {
     return new gApiUtils(calId);
   }
 
+  async fetchUserEmail(myHeader) {
+    const { headers } = myHeader || this.globalInit;
+    try {
+      const res = await fetch(
+        "https://www.googleapis.com/oauth2/v1/userinfo?alt=json",
+        {
+          headers,
+        }
+      );
+
+      const user = await res.json();
+      if (user.error) throw new Error(user.error);
+      const userEmail = user.email;
+      return userEmail;
+    } catch (error) {
+      console.error("Failed to fetch user info:", error);
+    }
+  }
+
   async makeCalendar(body) {
     let init = {
       ...this.globalInit,
@@ -69,15 +88,15 @@ export default class GApiUtils {
       })
     )
       .then((res) =>
-        res.map((i) => {
-          const r = i.json();
+        res.map(async (i) => {
+          if (!i.ok) throw new Error(i.text());
+          const r = await i.json();
           return r;
         })
       )
-
       .then((data) => {
-        console.log("success");
-        console.log(data);
+        // console.log("success");
+        // console.log(data);
         return true;
       })
       .catch((err) => {
@@ -88,19 +107,18 @@ export default class GApiUtils {
 
   async deleteCalendar() {
     const init = { ...this.globalInit, method: "DELETE" };
-    console.log(this.calId, init)
+    console.log(init);
     return fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${this.calId}`,
       init
     )
       .then((res) => {
-        if (res.ok) {
+        if (res.ok || res.status == 404) {
           return res.text();
         }
         throw new Error(res.status, res.text());
       })
-      .then((data) => {
-        console.log(data);
+      .then(async (_) => {
         return true;
       })
       .catch((err) => {
@@ -110,7 +128,6 @@ export default class GApiUtils {
   }
 
   shareCalendar(email) {
-    // set apiState so that share calendar disables the share button when in waiting/loading state then shows the appropriate message for failure and success
     const body = JSON.stringify({
       scope: {
         type: "user",
@@ -119,6 +136,7 @@ export default class GApiUtils {
       role: "reader",
     });
     let init = { ...this.globalInit, method: "POST", body };
+    console.log(this.globalInit);
     return fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${this.calId}/acl`,
       init
@@ -132,7 +150,9 @@ export default class GApiUtils {
         });
       })
       .then((data) => {
-        console.log(`${data.scope.value} has been invited to join your calendar`);
+        console.log(
+          `${data.scope.value} has been invited to join your calendar`
+        );
         return true;
       })
       .catch((err) => {
@@ -142,43 +162,32 @@ export default class GApiUtils {
   }
 
   async updateCalendar(fetchedSchedule) {
-    // update button will be disabled until fetchedJson is filled
-    // we need to tell the user how to get the most up to date info
-
-    function fetchAll(urls, method) {
+    const fetchAll = (urls, method) => {
       return Promise.all(
         urls.map(({ url, payload }) => {
           const body = payload ? JSON.stringify(payload) : "";
-          console.log("url", url);
-          console.log("body", body);
           return fetch(url, {
             ...this.globalInit,
             method,
             body,
           })
             .then((res) => {
-              if (res.ok) {
-                console.log(res.status);
-                return method == "PUT" ? res.json() : res.text();
+              if (!res.ok) {
+                throw new Error(res.text());
               }
-              throw new Error(res.text());
-            })
-            .then((data) => {
-              console.log(method, " success");
-              console.log(data);
             })
             .catch((err) => {
               console.log(method);
-              console.warn(err);
+              throw new Error(err);
             });
         })
       );
-    }
+    };
 
-    fetch(
+    return fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${this.calId}/events`,
       {
-        ...globalInit,
+        ...this.globalInit,
       }
     )
       .then((res) => {
@@ -188,28 +197,27 @@ export default class GApiUtils {
         throw new Error(res.status);
       })
       .then(async (calendarEvents) => {
-        const events = parseDiff(
-          calendarEvents,
-          fetchedSchedule,
-        );
+        // console.log(fetchedSchedule)
+        const events = parseDiff(calendarEvents, fetchedSchedule);
 
-        if(events.PUT.length == events.POST.length == events.DELETE.length == 0) {
+        if (
+          events.PUT.length == 0 &&
+          events.POST.length == 0 &&
+          events.DELETE.length == 0
+        ) {
           return false;
         }
 
-        console.log(events);
-
-        await addEventsToCalendar(events["POST"], calId);
-        console.log(calId, events["PUT"][0]);
+        await this.addEventsToCalendar(events["POST"], this.calId);
         await fetchAll(
           events["DELETE"].map((eventId) => ({
-            url: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${eventId}`,
+            url: `https://www.googleapis.com/calendar/v3/calendars/${this.calId}/events/${eventId}`,
           })),
           "DELETE"
         );
         await fetchAll(
           events["PUT"].map(({ payload, eventId }) => ({
-            url: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${eventId}`,
+            url: `https://www.googleapis.com/calendar/v3/calendars/${this.calId}/events/${eventId}`,
             payload,
           })),
           "PUT"
@@ -230,6 +238,9 @@ export default class GApiUtils {
   }
 
   setAuthorizationHeader(tokenType, token) {
+    // if(!tokenType || !token) {
+    //   console.warn("headers have been removed")
+    // }
     this.globalInit.headers = {
       Authorization: `${tokenType} ${token}`,
     };
